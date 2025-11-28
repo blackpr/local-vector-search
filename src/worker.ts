@@ -1,0 +1,203 @@
+import { pipeline, FeatureExtractionPipeline } from '@huggingface/transformers';
+// Import SQLite statically so Vite can bundle/process it
+// @ts-ignore
+import initSQLite from './vendor/sqlite3.mjs';
+
+// Define types for messages
+export type WorkerMessage =
+  | { type: 'INIT' }
+  | { type: 'ADD_NOTE'; payload: { text: string; category: string } }
+  | { type: 'SEARCH'; payload: string };
+
+export type WorkerResponse =
+  | { type: 'READY' }
+  | { type: 'NOTE_ADDED'; text: string }
+  | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }
+  | { type: 'ERROR'; error: string }
+  | { type: 'PROGRESS'; payload: any };
+
+const MODEL_ID = 'onnx-community/embeddinggemma-300m-ONNX';
+
+let db: any;
+let classifier: FeatureExtractionPipeline | null = null;
+
+// Initialize the AI and DB
+async function initialize() {
+  try {
+    // A. Load the AI Model
+    console.log('Loading AI Model...');
+    // @ts-ignore - types can be complex
+    classifier = await pipeline('feature-extraction', MODEL_ID, {
+      device: 'webgpu', // Uses WebGPU if available, falls back to WASM
+      dtype: 'fp32',    // SQLite expects float32
+      progress_callback: (data: any) => {
+        self.postMessage({ type: 'PROGRESS', payload: data });
+      }
+    });
+
+    // B. Load the Database
+    console.log('Loading SQLite...');
+
+    const sqlite3 = await initSQLite({
+      print: console.log,
+      printErr: console.error,
+    });
+
+    // Use OPFS if available, otherwise memory
+    try {
+      // Fix for OPFS: Check if shared array buffer is available
+      if ('opfs' in sqlite3 && typeof SharedArrayBuffer !== 'undefined') {
+        db = new sqlite3.oo1.OpfsDb('/notes.db');
+        console.log('Using OPFS storage');
+      } else {
+        db = new sqlite3.oo1.DB(':memory:');
+        console.log('Using in-memory storage (OPFS unavailable)');
+      }
+    } catch (e) {
+      console.warn('OPFS failed, falling back to memory', e);
+      db = new sqlite3.oo1.DB(':memory:');
+    }
+
+    // C. Create tables
+    db.exec(`
+      CREATE VIRTUAL TABLE IF NOT EXISTS vec_notes USING vec0(
+        embedding float[768]
+      );
+      CREATE TABLE IF NOT EXISTS notes(
+        rowid INTEGER PRIMARY KEY,
+        text TEXT,
+        category TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    console.log('System Ready.');
+    self.postMessage({ type: 'READY' });
+  } catch (error) {
+    console.error('Initialization error:', error);
+    self.postMessage({ type: 'ERROR', error: (error as Error).message });
+  }
+}
+// ... rest of file ...
+// Helper: Generate Embedding
+async function getEmbedding(text: string, isQuery = false) {
+  if (!classifier) throw new Error('Classifier not initialized');
+
+  // EmbeddingGemma requires specific prompts
+  const prefix = isQuery
+    ? 'task: search result | query: '
+    : 'title: none | text: ';
+
+  const output = await classifier(prefix + text, { pooling: 'mean', normalize: true });
+  return output.data; // Returns Float32Array
+}
+
+// Helper: Convert Float32Array to Uint8Array for SQLite BLOB binding
+function toSqliteBlob(vector: any): Uint8Array {
+  if (vector instanceof Float32Array) {
+    return new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength);
+  }
+  return vector;
+}
+
+// Helper: Insert a Note
+async function addNote(text: string, category: string) {
+  if (!db) throw new Error('Database not initialized');
+
+  const embedding = await getEmbedding(text, false);
+
+  // Transaction to ensure data integrity
+  db.transaction(() => {
+    // 1. Insert actual text into normal table
+    db.exec({
+      sql: 'INSERT INTO notes(text, category) VALUES (?, ?)',
+      bind: [text, category]
+    });
+
+    const rowId = db.selectValue('SELECT last_insert_rowid()');
+
+    // 2. Insert vector into vector table
+    // We use a prepared statement for the vector insert
+    const stmt = db.prepare('INSERT INTO vec_notes(rowid, embedding) VALUES (?, ?)');
+    try {
+      // SQLite WASM bind expects an array for positional arguments
+      stmt.bind([rowId, toSqliteBlob(embedding)]);
+      stmt.step();
+    } finally {
+      stmt.finalize();
+    }
+  });
+
+  return true;
+}
+
+// Helper: Search
+async function search(query: string) {
+  if (!db) throw new Error('Database not initialized');
+
+  const queryVector = await getEmbedding(query, true);
+
+  // Perform Vector Search
+  const sql = `
+    SELECT 
+      notes.text, 
+      notes.category, 
+      vec_distance_L2(vec_notes.embedding, ?) as distance 
+    FROM vec_notes 
+    LEFT JOIN notes ON vec_notes.rowid = notes.rowid
+    ORDER BY distance ASC 
+    LIMIT 10
+  `;
+
+  const stmt = db.prepare(sql);
+  const results: any[] = [];
+
+  try {
+    // Fix: bind(1, vector) failed with "When binding an object, an index argument is not permitted."
+    // This suggests that when binding a raw typed array/blob, we might need to pass it differently
+    // or the specific bind implementation in this sqlite3-wasm version treats the TypedArray as a generic object if passed with an index.
+    // Let's try using bind([vector]) which is the standard way to bind a single parameter in a prepared statement 
+    // or explicitly check if we need to convert it to a standard array (though that would be slow).
+    //
+    // However, the error specifically says "When binding an object...". 
+    // Float32Array IS an object in JS. SQLite WASM usually handles TypedArrays as BLOBs.
+    //
+    // Let's revert to array binding for the single parameter query, 
+    // BUT wrap it in an array: bind([queryVector])
+    // The previous error "Unsupported bind() argument type: object" happened when we did bind([rowId, embedding]).
+    // 
+    // Let's try the most robust way for sqlite-wasm: passing an array of values where the vector is one element.
+    stmt.bind([toSqliteBlob(queryVector)]);
+
+    while (stmt.step()) {
+      const row = stmt.get({}); // Get as object
+      results.push(row);
+    }
+  } finally {
+    stmt.finalize();
+  }
+
+  return results;
+}
+
+// Message Handler
+self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
+  const { type } = e.data;
+
+  try {
+    if (type === 'INIT') {
+      await initialize();
+    } else if (type === 'ADD_NOTE') {
+      const payload = (e.data as any).payload;
+      await addNote(payload.text, payload.category);
+      self.postMessage({ type: 'NOTE_ADDED', text: payload.text });
+    } else if (type === 'SEARCH') {
+      const payload = (e.data as any).payload;
+      const results = await search(payload);
+      self.postMessage({ type: 'SEARCH_RESULTS', results });
+    }
+  } catch (error) {
+    console.error('Worker error:', error);
+    self.postMessage({ type: 'ERROR', error: (error as Error).message });
+  }
+};
