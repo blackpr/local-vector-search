@@ -18,8 +18,10 @@ function App() {
     return () => clearTimeout(timer);
   }, [query, search]);
 
-  // Refresh list when tab changes
+  // Refresh list and clear inputs when tab changes
   useEffect(() => {
+    setQuery('');
+    setNewNote('');
     if (activeTab === 'list') {
       listNotes();
     }
