@@ -6,6 +6,7 @@ export function useWorker() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<Array<{ text: string; category: string; distance: number }>>([]);
+  const [allNotes, setAllNotes] = useState<Array<{ id: number; text: string; category: string; created_at: string }>>([]);
   const [isIndexing, setIsIndexing] = useState(false);
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
 
@@ -22,8 +23,15 @@ export function useWorker() {
         setProgress(null);
       } else if (type === 'NOTE_ADDED') {
         setIsIndexing(false);
+        // Refresh list if needed
+        worker.postMessage({ type: 'LIST_NOTES' });
       } else if (type === 'SEARCH_RESULTS') {
         setSearchResults((e.data as any).results);
+      } else if (type === 'NOTES_LISTED') {
+        setAllNotes((e.data as any).results);
+      } else if (type === 'NOTE_DELETED') {
+        const id = (e.data as any).id;
+        setAllNotes(prev => prev.filter(note => note.id !== id));
       } else if (type === 'ERROR') {
         setStatus('error');
         setError((e.data as any).error);
@@ -63,5 +71,13 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'SEARCH', payload: query });
   }, []);
 
-  return { status, error, searchResults, addNote, search, isIndexing, progress };
+  const listNotes = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'LIST_NOTES' });
+  }, []);
+
+  const deleteNote = useCallback((id: number) => {
+    workerRef.current?.postMessage({ type: 'DELETE_NOTE', payload: id });
+  }, []);
+
+  return { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress };
 }

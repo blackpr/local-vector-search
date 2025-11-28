@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useWorker } from './hooks/useWorker';
-import { Search, Plus, Brain, Loader2, Sparkles } from 'lucide-react';
+import { Search, Plus, Brain, Loader2, Sparkles, Trash2, List } from 'lucide-react';
 import clsx from 'clsx';
 
 function App() {
-  const { status, error, searchResults, addNote, search, isIndexing, progress } = useWorker();
+  const { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress } = useWorker();
   const [query, setQuery] = useState('');
   const [newNote, setNewNote] = useState('');
   const [category, setCategory] = useState('Personal');
-  const [activeTab, setActiveTab] = useState<'search' | 'add'>('search');
+  const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list'>('search');
 
   // Debounce search
   useEffect(() => {
@@ -17,6 +17,13 @@ function App() {
     }, 300);
     return () => clearTimeout(timer);
   }, [query, search]);
+
+  // Refresh list when tab changes
+  useEffect(() => {
+    if (activeTab === 'list') {
+      listNotes();
+    }
+  }, [activeTab, listNotes]);
 
   const handleAddNote = (e: React.FormEvent) => {
     e.preventDefault();
@@ -71,6 +78,15 @@ function App() {
                     )}
                 >
                     <Search className="w-4 h-4" /> Search
+                </button>
+                <button 
+                    onClick={() => setActiveTab('list')}
+                    className={clsx(
+                        "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                        activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                    )}
+                >
+                    <List className="w-4 h-4" /> All Notes
                 </button>
                 <button 
                     onClick={() => setActiveTab('add')}
@@ -133,6 +149,51 @@ function App() {
                            <div className="text-center py-12 text-zinc-600">
                                 <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                 <p>Type to explore your memory.</p>
+                                {status === 'ready' && (
+                                    <button 
+                                        onClick={loadDemoData}
+                                        className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
+                                    >
+                                        Inject Demo Data
+                                    </button>
+                                )}
+                           </div>
+                        )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'list' && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                    <h2 className="text-xl font-semibold text-zinc-200">All Notes ({allNotes.length})</h2>
+                    <div className="space-y-3">
+                        {allNotes.length > 0 ? (
+                            allNotes.map((note) => (
+                                <div key={note.id} className="group p-4 rounded-xl bg-zinc-900/50 ring-1 ring-zinc-800 hover:bg-zinc-900 hover:ring-zinc-700 transition-all duration-300">
+                                    <div className="flex justify-between items-start gap-4">
+                                        <p className="text-zinc-200 leading-relaxed">{note.text}</p>
+                                        <button 
+                                            onClick={() => deleteNote(note.id)}
+                                            className="shrink-0 p-2 text-zinc-500 hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
+                                            title="Delete note"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                    <div className="mt-2 flex items-center gap-2 justify-between">
+                                        <span className="text-xs font-medium text-indigo-400 bg-indigo-400/10 px-2 py-0.5 rounded-md">
+                                            {note.category}
+                                        </span>
+                                        <span className="text-xs text-zinc-600">
+                                            {new Date(note.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                           <div className="text-center py-12 text-zinc-600">
+                                <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                <p>No thoughts yet.</p>
                                 {status === 'ready' && (
                                     <button 
                                         onClick={loadDemoData}

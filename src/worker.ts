@@ -7,12 +7,16 @@ import initSQLite from './vendor/sqlite3.mjs';
 export type WorkerMessage =
   | { type: 'INIT' }
   | { type: 'ADD_NOTE'; payload: { text: string; category: string } }
-  | { type: 'SEARCH'; payload: string };
+  | { type: 'SEARCH'; payload: string }
+  | { type: 'LIST_NOTES' }
+  | { type: 'DELETE_NOTE'; payload: number };
 
 export type WorkerResponse =
   | { type: 'READY' }
   | { type: 'NOTE_ADDED'; text: string }
   | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }
+  | { type: 'NOTES_LISTED'; results: Array<{ id: number; text: string; category: string; created_at: string }> }
+  | { type: 'NOTE_DELETED'; id: number }
   | { type: 'ERROR'; error: string }
   | { type: 'PROGRESS'; payload: any };
 
@@ -153,20 +157,6 @@ async function search(query: string) {
   const results: any[] = [];
 
   try {
-    // Fix: bind(1, vector) failed with "When binding an object, an index argument is not permitted."
-    // This suggests that when binding a raw typed array/blob, we might need to pass it differently
-    // or the specific bind implementation in this sqlite3-wasm version treats the TypedArray as a generic object if passed with an index.
-    // Let's try using bind([vector]) which is the standard way to bind a single parameter in a prepared statement 
-    // or explicitly check if we need to convert it to a standard array (though that would be slow).
-    //
-    // However, the error specifically says "When binding an object...". 
-    // Float32Array IS an object in JS. SQLite WASM usually handles TypedArrays as BLOBs.
-    //
-    // Let's revert to array binding for the single parameter query, 
-    // BUT wrap it in an array: bind([queryVector])
-    // The previous error "Unsupported bind() argument type: object" happened when we did bind([rowId, embedding]).
-    // 
-    // Let's try the most robust way for sqlite-wasm: passing an array of values where the vector is one element.
     stmt.bind([toSqliteBlob(queryVector)]);
 
     while (stmt.step()) {
@@ -178,6 +168,42 @@ async function search(query: string) {
   }
 
   return results;
+}
+
+// Helper: List all Notes
+async function listNotes() {
+  if (!db) throw new Error('Database not initialized');
+
+  const results: any[] = [];
+
+  // Use generic select loop
+  const stmt = db.prepare('SELECT rowid as id, text, category, created_at FROM notes ORDER BY created_at DESC');
+  try {
+    while (stmt.step()) {
+      results.push(stmt.get({}));
+    }
+  } finally {
+    stmt.finalize();
+  }
+
+  return results;
+}
+
+// Helper: Delete a Note
+async function deleteNote(id: number) {
+  if (!db) throw new Error('Database not initialized');
+
+  db.transaction(() => {
+    db.exec({
+      sql: 'DELETE FROM notes WHERE rowid = ?',
+      bind: [id]
+    });
+    db.exec({
+      sql: 'DELETE FROM vec_notes WHERE rowid = ?',
+      bind: [id]
+    });
+  });
+  return true;
 }
 
 // Message Handler
@@ -195,6 +221,13 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const payload = (e.data as any).payload;
       const results = await search(payload);
       self.postMessage({ type: 'SEARCH_RESULTS', results });
+    } else if (type === 'LIST_NOTES') {
+      const results = await listNotes();
+      self.postMessage({ type: 'NOTES_LISTED', results });
+    } else if (type === 'DELETE_NOTE') {
+      const payload = (e.data as any).payload;
+      await deleteNote(payload);
+      self.postMessage({ type: 'NOTE_DELETED', id: payload });
     }
   } catch (error) {
     console.error('Worker error:', error);
