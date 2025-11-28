@@ -160,8 +160,11 @@ async function search(query: string) {
     stmt.bind([toSqliteBlob(queryVector)]);
 
     while (stmt.step()) {
-      const row = stmt.get({}); // Get as object
-      results.push(row);
+      const row = stmt.get({}) as any; // Get as object
+      // Filter out results with poor matching score (distance >= 1.0 means score <= 0%)
+      if (row.distance < 1.0) {
+        results.push(row);
+      }
     }
   } finally {
     stmt.finalize();

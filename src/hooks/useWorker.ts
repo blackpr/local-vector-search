@@ -17,7 +17,7 @@ export function useWorker() {
 
     worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
       const { type } = e.data;
-      
+
       if (type === 'READY') {
         setStatus('ready');
         setProgress(null);
@@ -41,12 +41,12 @@ export function useWorker() {
         const payload = (e.data as any).payload;
         // Transformers.js progress format
         if (payload.status === 'progress') {
-            setProgress({
-                file: payload.file,
-                progress: payload.progress, // 0-100
-                loaded: payload.loaded,
-                total: payload.total
-            });
+          setProgress({
+            file: payload.file,
+            progress: payload.progress, // 0-100
+            loaded: payload.loaded,
+            total: payload.total
+          });
         }
       }
     };
@@ -65,8 +65,8 @@ export function useWorker() {
 
   const search = useCallback((query: string) => {
     if (query.length < 2) {
-        setSearchResults([]);
-        return;
+      setSearchResults([]);
+      return;
     }
     workerRef.current?.postMessage({ type: 'SEARCH', payload: query });
   }, []);

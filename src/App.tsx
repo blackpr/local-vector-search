@@ -32,17 +32,6 @@ function App() {
     setNewNote('');
   };
 
-  const loadDemoData = () => {
-    const samples = [
-        { text: "Remember to buy milk and eggs", category: "Personal" },
-        { text: "Meeting with the engineering team at 10 AM", category: "Work" },
-        { text: "Idea for app: A Tinder for adopting cats", category: "Ideas" },
-        { text: "Pasta recipe: Boil water, add salt, cook for 9 mins", category: "Recipes" },
-        { text: "The mitochondria is the powerhouse of the cell", category: "Science" },
-        { text: "Use 'git commit --amend' to fix the last commit", category: "Dev" },
-    ];
-    samples.forEach(s => addNote(s.text, s.category));
-  };
 
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30">
@@ -149,14 +138,6 @@ function App() {
                            <div className="text-center py-12 text-zinc-600">
                                 <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                 <p>Type to explore your memory.</p>
-                                {status === 'ready' && (
-                                    <button 
-                                        onClick={loadDemoData}
-                                        className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
-                                    >
-                                        Inject Demo Data
-                                    </button>
-                                )}
                            </div>
                         )}
                     </div>
@@ -194,14 +175,6 @@ function App() {
                            <div className="text-center py-12 text-zinc-600">
                                 <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
                                 <p>No thoughts yet.</p>
-                                {status === 'ready' && (
-                                    <button 
-                                        onClick={loadDemoData}
-                                        className="mt-4 text-sm text-indigo-400 hover:text-indigo-300 underline underline-offset-4"
-                                    >
-                                        Inject Demo Data
-                                    </button>
-                                )}
                            </div>
                         )}
                     </div>
