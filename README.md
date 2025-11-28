@@ -2,9 +2,6 @@
 
 A privacy-first, offline-capable semantic search engine running entirely in your browser. Built with **React**, **SQLite WASM**, and **Transformers.js**.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Status](https://img.shields.io/badge/status-production--ready-green.svg)
-
 ## 🚀 Features
 
 -   **100% Private & Offline**: No data ever leaves your device. All inference and storage happen locally.
