@@ -44,20 +44,34 @@ async function initialize() {
   try {
     console.log("Worker: Initializing...");
 
-    // Track progress for both models
+    // Track progress for both models with more accurate estimates
     const modelProgress = {
-      vectorLoaded: 0,
-      vectorTotal: 300 * 1024 * 1024, // ~300MB estimated for Gemma model
-      taggingLoaded: 0,
-      taggingTotal: 80 * 1024 * 1024, // ~80MB estimated for LaMini model
-      maxCombined: 0  // Track max to prevent going backwards
+      vectorFiles: new Map<string, { loaded: number, total: number }>(),
+      taggingFiles: new Map<string, { loaded: number, total: number }>(),
+      vectorEstimate: 1100 * 1024 * 1024, // ~1.1GB for Gemma fp32
+      taggingEstimate: 300 * 1024 * 1024, // ~300MB for LaMini fp32
+      vectorDone: false,
+      taggingDone: false,
+      maxCombined: 0
     };
 
     const sendCombinedProgress = () => {
-      // Calculate progress based on bytes loaded vs total
-      const vectorProgress = Math.min(100, (modelProgress.vectorLoaded / modelProgress.vectorTotal) * 100);
-      const taggingProgress = Math.min(100, (modelProgress.taggingLoaded / modelProgress.taggingTotal) * 100);
-      const combinedProgress = (vectorProgress + taggingProgress) / 2;
+      const getModelProgress = (fileMap: Map<string, { loaded: number, total: number }>, estimate: number, isDone: boolean) => {
+        if (isDone) return 100;
+        let loaded = 0;
+        let knownTotal = 0;
+        for (const file of fileMap.values()) {
+          loaded += file.loaded;
+          if (file.total) knownTotal += file.total;
+        }
+        const targetTotal = Math.max(knownTotal, estimate);
+        // Cap at 99% until the promise actually resolves
+        return Math.min(99, (loaded / targetTotal) * 100);
+      };
+
+      const vp = getModelProgress(modelProgress.vectorFiles, modelProgress.vectorEstimate, modelProgress.vectorDone);
+      const tp = getModelProgress(modelProgress.taggingFiles, modelProgress.taggingEstimate, modelProgress.taggingDone);
+      const combinedProgress = (vp + tp) / 2;
 
       // Only send if progress increased (never go backwards)
       if (combinedProgress > modelProgress.maxCombined) {
@@ -77,34 +91,38 @@ async function initialize() {
 
     // 1. Initialize Infrastructure
     vectorService = new TransformersVectorService((data) => {
-      if (data.status === 'progress' && data.loaded) {
-        modelProgress.vectorLoaded = data.loaded;
-        // Update total if we get it from the response
-        if (data.total) {
-          modelProgress.vectorTotal = Math.max(modelProgress.vectorTotal, data.total);
-        }
+      if (data.status === 'progress' && data.file) {
+        modelProgress.vectorFiles.set(data.file, {
+          loaded: data.loaded || 0,
+          total: data.total || 0
+        });
         sendCombinedProgress();
       }
     });
 
     taggingService = new TaggingService((data) => {
-      if (data.status === 'progress' && data.loaded) {
-        modelProgress.taggingLoaded = data.loaded;
-        // Update total if we get it from the response
-        if (data.total) {
-          modelProgress.taggingTotal = Math.max(modelProgress.taggingTotal, data.total);
-        }
+      if (data.status === 'progress' && data.file) {
+        modelProgress.taggingFiles.set(data.file, {
+          loaded: data.loaded || 0,
+          total: data.total || 0
+        });
         sendCombinedProgress();
       }
     });
 
     // Start model loading immediately (in parallel)
     console.log("Worker: Loading Vector Model and Tagging Model...");
-    const modelInitPromise = vectorService.initialize().catch(err => {
+    const modelInitPromise = vectorService.initialize().then(() => {
+      modelProgress.vectorDone = true;
+      sendCombinedProgress();
+    }).catch(err => {
       throw new Error(`Vector Model Load Failed: ${err.message}`);
     });
 
-    const taggingInitPromise = taggingService.initialize().catch(err => {
+    const taggingInitPromise = taggingService.initialize().then(() => {
+      modelProgress.taggingDone = true;
+      sendCombinedProgress();
+    }).catch(err => {
       throw new Error(`Tagging Model Load Failed: ${err.message}`);
     });
 
