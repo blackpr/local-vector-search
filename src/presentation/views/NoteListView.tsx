@@ -1,11 +1,10 @@
-import { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { NoteList } from '../components/NoteList';
 
 interface NoteListViewProps {
   title: ReactNode;
   notes: any[];
   offset: number;
-  LIMIT: number;
   onResetOffset: () => void;
   onDelete: (id: number) => void;
   onNoteClick: (note: any) => void;
@@ -20,7 +19,6 @@ export const NoteListView = ({
   title,
   notes,
   offset,
-  LIMIT,
   onResetOffset,
   onDelete,
   onNoteClick,

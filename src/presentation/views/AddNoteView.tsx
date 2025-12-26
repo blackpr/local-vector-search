@@ -2,9 +2,9 @@ import { AddNoteForm } from '../components/AddNoteForm';
 
 interface AddNoteViewProps {
   onAdd: (text: string, category: string, tags: string[]) => void;
-  categories: string[];
+  categories: Array<{ id: number; name: string }>;
   isProcessing: boolean;
-  onAutoCategory: (text: string) => Promise<string>;
+  onAutoCategory: (text: string) => Promise<string | null>;
   onAutoTags: (text: string) => Promise<string[]>;
 }
 

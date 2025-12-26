@@ -91,14 +91,14 @@ function App() {
         setActiveTab('list');
     };
 
-    const handleCategoryClick = (category: string) => {
+    const handleCategoryClick = (category: string | null) => {
         setFilterCategory(category === filterCategory ? null : category);
         setFilterTag(null);
         setOffset(0);
         setActiveTab('list');
     };
 
-    const handleTagClick = (tag: string) => {
+    const handleTagClick = (tag: string | null) => {
         setFilterTag(tag === filterTag ? null : tag);
         setFilterCategory(null);
         setOffset(0);
@@ -240,14 +240,13 @@ function App() {
                         }
                         notes={allNotes}
                         offset={offset}
-                        LIMIT={LIMIT}
                         onResetOffset={() => { setOffset(0); listNotes(LIMIT, 0); }}
                         onDelete={deleteNote}
                         onNoteClick={setSelectedNote}
                         onCategoryClick={handleCategoryClick}
                         onTagClick={handleTagClick}
                         onPin={handlePin}
-                        onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                        onLoadMore={handleLoadMore}
                         hasMore={allNotes.length === LIMIT}
                     />
                 )}
@@ -257,14 +256,13 @@ function App() {
                         title={offset > 0 ? `Pinned Notes (Page ${offset / LIMIT + 1})` : 'Pinned Notes'}
                         notes={allNotes.filter(n => n.isPinned)}
                         offset={offset}
-                        LIMIT={LIMIT}
                         onResetOffset={() => { setOffset(0); listNotes(LIMIT, 0, undefined, undefined, true); }}
                         onDelete={deleteNote}
                         onNoteClick={setSelectedNote}
                         onCategoryClick={handleCategoryClick}
                         onTagClick={handleTagClick}
                         onPin={handlePin}
-                        onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                        onLoadMore={handleLoadMore}
                         hasMore={allNotes.length === LIMIT}
                     />
                 )}

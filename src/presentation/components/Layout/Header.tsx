@@ -3,7 +3,7 @@ import { StatusBadge } from '../StatusBadge';
 
 interface HeaderProps {
   status: string;
-  progress: string;
+  progress: any;
   error: string | null;
   onShowCategoryManager: () => void;
   onShowSyncModal: () => void;

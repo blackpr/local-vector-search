@@ -57,9 +57,8 @@ export class TaggingService {
         // If comma split fails, try space split
         const spaceTags = generatedText.split(' ').map((t: string) => t.trim()).filter((t: string) => t.length > 2);
         if (spaceTags.length > 0) return spaceTags;
-        if (spaceTags.length > 0) return spaceTags;
 
-        return [`RAW:${generatedText}`];
+        return [];
       }
 
       return tags;

@@ -1,4 +1,4 @@
-import { Trash2, FileText, Tag, Hash, Pin, PinOff } from 'lucide-react';
+import { Trash2, FileText, Tag, Hash, Pin } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { useState } from 'react';
 import { ConfirmationModal } from './ConfirmationModal';
