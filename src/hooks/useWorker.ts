@@ -12,71 +12,75 @@ export function useWorker() {
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
 
   useEffect(() => {
-    const workerUrl = new URL('../app.worker.ts', import.meta.url);
-    console.log("Initializing Worker from:", workerUrl.toString());
-    const worker = new Worker(workerUrl, { type: 'module' });
-    workerRef.current = worker;
-    setStatus('loading');
+    let worker: Worker | null = null;
 
-    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
-      const { type } = e.data;
+    // Use Vite's ?worker suffix for proper TypeScript worker handling
+    // This ensures the worker is compiled to .js with correct MIME type
+    import('../app.worker.ts?worker').then((WorkerModule) => {
+      worker = new WorkerModule.default();
+      workerRef.current = worker;
+      setStatus('loading');
 
-      if (type === 'READY') {
-        setStatus('ready');
-        setProgress(null);
-      } else if (type === 'NOTE_ADDED') {
-        setIsIndexing(false);
-        // worker.postMessage({ type: 'LIST_NOTES' });
-      } else if (type === 'NOTE_UPDATED') {
-        const updatedNote = (e.data as any).payload;
-        if (updatedNote) {
-          setSearchResults(prev => prev.map(n =>
-            n.id === updatedNote.id ? { ...n, ...updatedNote, isPinned: updatedNote.isPinned } : n
-          ));
-          setAllNotes(prev => prev.map(n =>
-            n.id === updatedNote.id ? { ...n, ...updatedNote, isPinned: updatedNote.isPinned } : n
-          ));
+      worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+        const { type } = e.data;
+
+        if (type === 'READY') {
+          setStatus('ready');
+          setProgress(null);
+        } else if (type === 'NOTE_ADDED') {
+          setIsIndexing(false);
+          // worker.postMessage({ type: 'LIST_NOTES' });
+        } else if (type === 'NOTE_UPDATED') {
+          const updatedNote = (e.data as any).payload;
+          if (updatedNote) {
+            setSearchResults(prev => prev.map(n =>
+              n.id === updatedNote.id ? { ...n, ...updatedNote, isPinned: updatedNote.isPinned } : n
+            ));
+            setAllNotes(prev => prev.map(n =>
+              n.id === updatedNote.id ? { ...n, ...updatedNote, isPinned: updatedNote.isPinned } : n
+            ));
+          }
+          // worker.postMessage({ type: 'LIST_NOTES' });
+        } else if (type === 'SEARCH_RESULTS') {
+          setSearchResults((e.data as any).results);
+        } else if (type === 'NOTES_LISTED') {
+          setAllNotes((e.data as any).results);
+        } else if (type === 'NOTE_DELETED') {
+          const id = (e.data as any).id;
+          setAllNotes(prev => prev.filter(note => note.id !== id));
+          setSearchResults(prev => prev.filter(note => note.id !== id));
+        } else if (type === 'NOTE_RESTORED') {
+          // Note restored - refresh lists to show it again
+          // The worker will handle the actual restoration, we just need to refresh
+        } else if (type === 'ERROR') {
+          setStatus('error');
+          setError((e.data as any).error);
+          setIsIndexing(false);
+          setProgress(null);
+        } else if (type === 'CATEGORIES_LISTED') {
+          setCategories((e.data as any).results);
+        } else if (type === 'CATEGORY_ADDED') {
+          worker?.postMessage({ type: 'LIST_CATEGORIES' });
+        } else if (type === 'CATEGORY_DELETED') {
+          worker?.postMessage({ type: 'LIST_CATEGORIES' });
+        } else if (type === 'PROGRESS') {
+          const payload = (e.data as any).payload;
+          if (payload.status === 'progress') {
+            setProgress({
+              file: payload.file,
+              progress: payload.progress,
+              loaded: payload.loaded,
+              total: payload.total
+            });
+          }
         }
-        // worker.postMessage({ type: 'LIST_NOTES' });
-      } else if (type === 'SEARCH_RESULTS') {
-        setSearchResults((e.data as any).results);
-      } else if (type === 'NOTES_LISTED') {
-        setAllNotes((e.data as any).results);
-      } else if (type === 'NOTE_DELETED') {
-        const id = (e.data as any).id;
-        setAllNotes(prev => prev.filter(note => note.id !== id));
-        setSearchResults(prev => prev.filter(note => note.id !== id));
-      } else if (type === 'NOTE_RESTORED') {
-        // Note restored - refresh lists to show it again
-        // The worker will handle the actual restoration, we just need to refresh
-      } else if (type === 'ERROR') {
-        setStatus('error');
-        setError((e.data as any).error);
-        setIsIndexing(false);
-        setProgress(null);
-      } else if (type === 'CATEGORIES_LISTED') {
-        setCategories((e.data as any).results);
-      } else if (type === 'CATEGORY_ADDED') {
-        worker.postMessage({ type: 'LIST_CATEGORIES' });
-      } else if (type === 'CATEGORY_DELETED') {
-        worker.postMessage({ type: 'LIST_CATEGORIES' });
-      } else if (type === 'PROGRESS') {
-        const payload = (e.data as any).payload;
-        if (payload.status === 'progress') {
-          setProgress({
-            file: payload.file,
-            progress: payload.progress,
-            loaded: payload.loaded,
-            total: payload.total
-          });
-        }
-      }
-    };
+      };
 
-    worker.postMessage({ type: 'INIT' });
+      worker.postMessage({ type: 'INIT' });
+    });
 
     return () => {
-      worker.terminate();
+      worker?.terminate();
     };
   }, []);
 
