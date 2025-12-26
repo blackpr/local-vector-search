@@ -90,7 +90,7 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-4xl mx-auto w-full">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8 max-w-6xl mx-auto w-full">
         {/* Tags Section */}
         <div className="mb-6 flex flex-wrap items-center gap-2">
           {note.category && (

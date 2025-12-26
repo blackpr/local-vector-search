@@ -151,7 +151,7 @@ function App() {
     if (selectedNote) {
         return (
             <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30 p-4 md:p-8">
-                <div className="max-w-2xl mx-auto">
+                <div className="max-w-6xl mx-auto">
                     <NoteDetail
                         note={selectedNote}
                         onBack={() => {
