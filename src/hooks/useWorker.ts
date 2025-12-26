@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { WorkerResponse } from '../app.worker';
+import type { WorkerResponse } from '../presentation/worker/WorkerMessages';
 
 export function useWorker() {
   const workerRef = useRef<Worker | null>(null);

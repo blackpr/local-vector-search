@@ -1,8 +1,10 @@
 import { pipeline, type TextGenerationPipeline } from '@huggingface/transformers';
 
+import { type TaggingSystem } from '../domain/TaggingSystem';
+
 const MODEL_ID = 'Xenova/LaMini-Flan-T5-77M';
 
-export class TaggingService {
+export class TaggingService implements TaggingSystem {
   private generator: TextGenerationPipeline | null = null;
   private trace: string[] = [];
 

@@ -4,49 +4,20 @@ import { ListNotesUseCase } from './application/ListNotesUseCase';
 import { ManageCategoriesUseCase } from './application/ManageCategoriesUseCase';
 import { SearchNotesUseCase } from './application/SearchNotesUseCase';
 import { GetNoteUseCase } from './application/GetNoteUseCase';
+import { UpdateNoteUseCase } from './application/UpdateNoteUseCase';
+import { GenerateTagsUseCase } from './application/GenerateTagsUseCase';
+import { SuggestCategoryUseCase } from './application/SuggestCategoryUseCase';
+import { ExportDataUseCase } from './application/ExportDataUseCase';
+import { ImportDataUseCase } from './application/ImportDataUseCase';
+import { SystemManagementUseCase } from './application/SystemManagementUseCase';
+
 import { DatabaseFactory } from './infrastructure/DatabaseFactories';
 import { SqliteNoteRepository } from './infrastructure/SqliteNoteRepository';
 import { TransformersVectorService } from './infrastructure/TransformersVectorService';
 import { TaggingService } from './infrastructure/TaggingService';
+import { SqliteDatabaseManager } from './infrastructure/SqliteDatabaseManager';
 
-// Define types for messages (Keep consistent with frontend)
-export type WorkerMessage =
-  | { type: 'INIT' }
-  | { type: 'ADD_NOTE'; payload: { text: string; category: string; tags: string[] } }
-  | { type: 'SEARCH'; payload: { query: string; limit?: number; offset?: number } }
-  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string; tag?: string; pinned?: boolean } }
-  | { type: 'DELETE_NOTE'; payload: number }
-  | { type: 'UPDATE_NOTE'; payload: any }
-  | { type: 'LIST_CATEGORIES' }
-  | { type: 'ADD_CATEGORY'; payload: string }
-  | { type: 'DELETE_CATEGORY'; payload: number }
-  | { type: 'EXPORT' }
-  | { type: 'EXPORT_DB' }
-  | { type: 'IMPORT_DB'; payload: File }
-  | { type: 'SUGGEST_CATEGORY'; payload: string }
-  | { type: 'GENERATE_TAGS'; payload: string }
-  | { type: 'IMPORT'; payload: any }
-  | { type: 'GET_NOTE'; payload: number };
-
-export type WorkerResponse =
-  | { type: 'READY' }
-  | { type: 'NOTE_ADDED'; text: string }
-  | { type: 'NOTE_UPDATED'; payload?: any }
-  | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }
-  | { type: 'NOTES_LISTED'; results: Array<{ id: number; text: string; category: string; created_at: string }> }
-  | { type: 'NOTE_DELETED'; id: number }
-  | { type: 'CATEGORIES_LISTED'; results: Array<{ id: number; name: string }> }
-  | { type: 'CATEGORY_ADDED'; result: { id: number; name: string } }
-  | { type: 'CATEGORY_DELETED'; id: number }
-  | { type: 'EXPORT_RESULT'; payload: any }
-  | { type: 'EXPORT_DB_RESULT'; payload: Blob }
-  | { type: 'IMPORT_RESULT'; payload: { imported: number; updated: number } }
-  | { type: 'IMPORT_DB_RESULT' }
-  | { type: 'CATEGORY_SUGGESTED'; result: string | null }
-  | { type: 'TAGS_GENERATED'; result: string[] }
-  | { type: 'ERROR'; error: string }
-  | { type: 'NOTE_FOUND'; result: any }
-  | { type: 'PROGRESS'; payload: any };
+import type { WorkerMessage, WorkerResponse } from './presentation/worker/WorkerMessages';
 
 // Global dependency instances
 let addNoteUseCase: AddNoteUseCase;
@@ -55,9 +26,17 @@ let listNotesUseCase: ListNotesUseCase;
 let deleteNoteUseCase: DeleteNoteUseCase;
 let manageCategoriesUseCase: ManageCategoriesUseCase;
 let getNoteUseCase: GetNoteUseCase;
-let noteRepository: SqliteNoteRepository;
+let updateNoteUseCase: UpdateNoteUseCase;
+let generateTagsUseCase: GenerateTagsUseCase;
+let suggestCategoryUseCase: SuggestCategoryUseCase;
+let exportDataUseCase: ExportDataUseCase;
+let importDataUseCase: ImportDataUseCase;
+let systemManagementUseCase: SystemManagementUseCase;
+
+let noteRepository: SqliteNoteRepository | undefined;
 let vectorService: TransformersVectorService;
 let taggingService: TaggingService;
+let databaseManager: SqliteDatabaseManager;
 
 async function initialize() {
   try {
@@ -65,7 +44,7 @@ async function initialize() {
 
     // 1. Initialize Infrastructure
     vectorService = new TransformersVectorService((data) => {
-      self.postMessage({ type: 'PROGRESS', payload: data });
+      self.postMessage({ type: 'PROGRESS', payload: data } as WorkerResponse);
     });
 
     // Start model loading immediately
@@ -84,19 +63,31 @@ async function initialize() {
     await modelInitPromise;
     console.log("Worker: Model Loaded.");
 
-    // 2. Initialize Application Layer
+    // Tagging Service (Lazy init handled inside service or here)
+    taggingService = new TaggingService();
+    // databaseManager needs access to current noteRepository for export/closing
+    databaseManager = new SqliteDatabaseManager(() => noteRepository);
+
+    // 2. Initialize Application Layer (Use Cases)
+    // We pass dependencies. implicit dependency injection.
     addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService);
     searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
     listNotesUseCase = new ListNotesUseCase(noteRepository);
     deleteNoteUseCase = new DeleteNoteUseCase(noteRepository);
     manageCategoriesUseCase = new ManageCategoriesUseCase(noteRepository);
     getNoteUseCase = new GetNoteUseCase(noteRepository);
+    updateNoteUseCase = new UpdateNoteUseCase(noteRepository);
+    generateTagsUseCase = new GenerateTagsUseCase(taggingService);
+    suggestCategoryUseCase = new SuggestCategoryUseCase(searchNotesUseCase);
+    exportDataUseCase = new ExportDataUseCase(noteRepository);
+    importDataUseCase = new ImportDataUseCase(noteRepository, vectorService);
+    systemManagementUseCase = new SystemManagementUseCase(databaseManager);
 
     console.log('System Ready.');
-    self.postMessage({ type: 'READY' });
+    self.postMessage({ type: 'READY' } as WorkerResponse);
   } catch (error) {
     console.error('Initialization error:', error);
-    self.postMessage({ type: 'ERROR', error: (error as Error).message });
+    self.postMessage({ type: 'ERROR', error: (error as Error).message } as WorkerResponse);
   }
 }
 
@@ -110,11 +101,10 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       if (!addNoteUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
       await addNoteUseCase.execute(payload.text, payload.category, payload.tags);
-      self.postMessage({ type: 'NOTE_ADDED', text: payload.text });
+      self.postMessage({ type: 'NOTE_ADDED', text: payload.text } as WorkerResponse);
     } else if (type === 'SEARCH') {
       if (!searchNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
-      // Handle both old string payload (if cached/race condition) and new object payload
       const query = typeof payload === 'string' ? payload : payload.query;
       const limit = typeof payload === 'object' ? payload.limit : undefined;
       const offset = typeof payload === 'object' ? payload.offset : undefined;
@@ -124,7 +114,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         ...r,
         created_at: r.createdAt
       }));
-      self.postMessage({ type: 'SEARCH_RESULTS', results: mappedResults as any });
+      self.postMessage({ type: 'SEARCH_RESULTS', results: mappedResults as any } as WorkerResponse);
     } else if (type === 'LIST_NOTES') {
       if (!listNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload || {};
@@ -133,127 +123,96 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
         ...r,
         created_at: r.createdAt
       }));
-      self.postMessage({ type: 'NOTES_LISTED', results: mappedResults as any });
+      self.postMessage({ type: 'NOTES_LISTED', results: mappedResults as any } as WorkerResponse);
     } else if (type === 'SUGGEST_CATEGORY') {
-      if (!searchNotesUseCase) throw new Error('Not initialized');
-      const payload = (e.data as any).payload; // query text
-      // Use search to find similar notes
-      const results = await searchNotesUseCase.execute(payload);
-      // Aggregate top categories
-      const categoryCounts: Record<string, number> = {};
-      results.forEach(r => {
-        if (r.category) {
-          categoryCounts[r.category] = (categoryCounts[r.category] || 0) + 1;
-        }
-      });
-      // Sort by frequency
-      const topCategory = Object.keys(categoryCounts).sort((a, b) => categoryCounts[b] - categoryCounts[a])[0];
-
-      self.postMessage({ type: 'CATEGORY_SUGGESTED', result: topCategory || null });
+      if (!suggestCategoryUseCase) throw new Error('Not initialized');
+      const payload = (e.data as any).payload;
+      const result = await suggestCategoryUseCase.execute(payload);
+      self.postMessage({ type: 'CATEGORY_SUGGESTED', result } as WorkerResponse);
     } else if (type === 'GENERATE_TAGS') {
+      if (!generateTagsUseCase) throw new Error('Not initialized');
+      const payload = (e.data as any).payload;
+      console.log("Worker: Generating tags for", payload);
       try {
-        if (!taggingService) {
-          console.log("Worker: Lazy Initializing Tagging Service...");
-          taggingService = new TaggingService();
-          await taggingService.initialize();
-        }
-        const payload = (e.data as any).payload;
-        console.log("Worker: Generating tags for", payload);
-        const tags = await taggingService.generateTags(payload);
-        self.postMessage({ type: 'TAGS_GENERATED', result: tags });
+        const tags = await generateTagsUseCase.execute(payload);
+        self.postMessage({ type: 'TAGS_GENERATED', result: tags } as WorkerResponse);
       } catch (err) {
         console.error("Worker: Tag Gen Error", err);
-        self.postMessage({ type: 'TAGS_GENERATED', result: [] });
-        self.postMessage({ type: 'ERROR', error: `Tagging Failed: ${(err as Error).message}` });
+        self.postMessage({ type: 'TAGS_GENERATED', result: [] } as WorkerResponse);
+        self.postMessage({ type: 'ERROR', error: `Tagging Failed: ${(err as Error).message}` } as WorkerResponse);
       }
     } else if (type === 'DELETE_NOTE') {
       if (!deleteNoteUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
       await deleteNoteUseCase.execute(payload);
-      self.postMessage({ type: 'NOTE_DELETED', id: payload });
+      self.postMessage({ type: 'NOTE_DELETED', id: payload } as WorkerResponse);
     } else if (type === 'UPDATE_NOTE') {
-      if (!noteRepository) throw new Error('Not initialized');
+      if (!updateNoteUseCase) throw new Error('Not initialized');
       const note = (e.data as any).payload;
-      await noteRepository.update(note);
-      self.postMessage({ type: 'NOTE_UPDATED', payload: note });
+      await updateNoteUseCase.execute(note);
+      self.postMessage({ type: 'NOTE_UPDATED', payload: note } as WorkerResponse);
     } else if (type === 'LIST_CATEGORIES') {
       if (!manageCategoriesUseCase) throw new Error('Not initialized');
       const results = await manageCategoriesUseCase.list();
-      self.postMessage({ type: 'CATEGORIES_LISTED', results });
+      self.postMessage({ type: 'CATEGORIES_LISTED', results } as WorkerResponse);
     } else if (type === 'ADD_CATEGORY') {
       if (!manageCategoriesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
       const result = await manageCategoriesUseCase.add(payload);
-      self.postMessage({ type: 'CATEGORY_ADDED', result });
+      self.postMessage({ type: 'CATEGORY_ADDED', result } as WorkerResponse);
     } else if (type === 'DELETE_CATEGORY') {
       if (!manageCategoriesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
       await manageCategoriesUseCase.delete(payload);
-      self.postMessage({ type: 'CATEGORY_DELETED', id: payload });
+      self.postMessage({ type: 'CATEGORY_DELETED', id: payload } as WorkerResponse);
     } else if (type === 'EXPORT') {
-      if (!noteRepository) throw new Error('Not initialized');
-      const results = await noteRepository.exportAll();
-      self.postMessage({ type: 'EXPORT_RESULT', payload: results });
+      if (!exportDataUseCase) throw new Error('Not initialized');
+      const results = await exportDataUseCase.execute();
+      self.postMessage({ type: 'EXPORT_RESULT', payload: results } as WorkerResponse);
     } else if (type === 'IMPORT') {
-      if (!noteRepository) throw new Error('Not initialized');
+      if (!importDataUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
-      const result = await noteRepository.merge(payload, vectorService);
-      self.postMessage({ type: 'IMPORT_RESULT', payload: result });
+      const result = await importDataUseCase.execute(payload);
+      self.postMessage({ type: 'IMPORT_RESULT', payload: result } as WorkerResponse);
       // Helper refresh
       const notes = await listNotesUseCase.execute();
       const mappedResults = notes.map(r => ({ ...r, created_at: r.createdAt }));
-      self.postMessage({ type: 'NOTES_LISTED', results: mappedResults as any });
+      self.postMessage({ type: 'NOTES_LISTED', results: mappedResults as any } as WorkerResponse);
     } else if (type === 'EXPORT_DB') {
-      if (!noteRepository) throw new Error('Not initialized');
-      const blob = await noteRepository.exportDatabase();
-      self.postMessage({ type: 'EXPORT_DB_RESULT', payload: blob });
+      if (!systemManagementUseCase) throw new Error('Not initialized');
+      const blob = await systemManagementUseCase.exportDatabase();
+      self.postMessage({ type: 'EXPORT_DB_RESULT', payload: blob } as WorkerResponse);
     } else if (type === 'IMPORT_DB') {
+      if (!systemManagementUseCase) throw new Error('Not initialized');
       const file = (e.data as any).payload;
-
-      // 1. Close existing DB
-      if (noteRepository) {
-        noteRepository.close();
-      }
-
-      // 2. Overwrite OPFS file
       try {
-        const root = await navigator.storage.getDirectory();
-        const fileHandle = await root.getFileHandle('notes.db', { create: true });
-        // @ts-ignore
-        const writable = await fileHandle.createWritable();
-        await writable.write(file);
-        await writable.close();
-
-        // 3. Re-initialize
+        await systemManagementUseCase.importDatabase(file);
+        // Re-initialize to reload DB
         await initialize();
-        self.postMessage({ type: 'IMPORT_DB_RESULT' });
+        self.postMessage({ type: 'IMPORT_DB_RESULT' } as WorkerResponse);
 
         // Helper refresh
-        // Need to get valid worker instance or self post
         if (listNotesUseCase) {
-          const payload = { limit: 20, offset: 0 };
-          const results = await listNotesUseCase.execute(payload.limit, payload.offset);
-          const mappedResults = results.map(r => ({ ...r, created_at: r.createdAt }));
-          self.postMessage({ type: 'NOTES_LISTED', results: mappedResults as any });
+          const notes = await listNotesUseCase.execute();
+          const mappedResults = notes.map(r => ({ ...r, created_at: r.createdAt }));
+          self.postMessage({ type: 'NOTES_LISTED', results: mappedResults as any } as WorkerResponse);
         }
       } catch (err) {
-        console.error("OPFS Import Error", err);
-        self.postMessage({ type: 'ERROR', error: "Failed to overwrite database file. " + err });
+        self.postMessage({ type: 'ERROR', error: (err as Error).message } as WorkerResponse);
       }
     } else if (type === 'GET_NOTE') {
       if (!getNoteUseCase) throw new Error('Not initialized');
       const id = (e.data as any).payload;
       const result = await getNoteUseCase.execute(id);
       if (result) {
-        // Map keys for frontend compatibility
         const mapped = { ...result, created_at: result.createdAt };
-        self.postMessage({ type: 'NOTE_FOUND', result: mapped });
+        self.postMessage({ type: 'NOTE_FOUND', result: mapped } as WorkerResponse);
       } else {
-        self.postMessage({ type: 'NOTE_FOUND', result: null });
+        self.postMessage({ type: 'NOTE_FOUND', result: null } as WorkerResponse);
       }
     }
   } catch (error) {
     console.error('Worker error:', error);
-    self.postMessage({ type: 'ERROR', error: (error as Error).message });
+    self.postMessage({ type: 'ERROR', error: (error as Error).message } as WorkerResponse);
   }
 };
