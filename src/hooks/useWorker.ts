@@ -7,6 +7,7 @@ export function useWorker() {
   const [error, setError] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<Array<{ text: string; category: string; distance: number }>>([]);
   const [allNotes, setAllNotes] = useState<Array<{ id: number; text: string; category: string; created_at: string }>>([]);
+  const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [isIndexing, setIsIndexing] = useState(false);
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
 
@@ -24,6 +25,8 @@ export function useWorker() {
       } else if (type === 'NOTE_ADDED') {
         setIsIndexing(false);
         worker.postMessage({ type: 'LIST_NOTES' });
+      } else if (type === 'NOTE_UPDATED') {
+        worker.postMessage({ type: 'LIST_NOTES' });
       } else if (type === 'SEARCH_RESULTS') {
         setSearchResults((e.data as any).results);
       } else if (type === 'NOTES_LISTED') {
@@ -36,6 +39,12 @@ export function useWorker() {
         setError((e.data as any).error);
         setIsIndexing(false);
         setProgress(null);
+      } else if (type === 'CATEGORIES_LISTED') {
+        setCategories((e.data as any).results);
+      } else if (type === 'CATEGORY_ADDED') {
+        worker.postMessage({ type: 'LIST_CATEGORIES' });
+      } else if (type === 'CATEGORY_DELETED') {
+        worker.postMessage({ type: 'LIST_CATEGORIES' });
       } else if (type === 'PROGRESS') {
         const payload = (e.data as any).payload;
         if (payload.status === 'progress') {
@@ -69,12 +78,42 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'SEARCH', payload: query });
   }, []);
 
-  const listNotes = useCallback(() => {
-    workerRef.current?.postMessage({ type: 'LIST_NOTES' });
+  const listNotes = useCallback((limit: number = 20, offset: number = 0, category?: string) => {
+    workerRef.current?.postMessage({ type: 'LIST_NOTES', payload: { limit, offset, category } });
+  }, []);
+
+  const suggestCategory = useCallback((text: string) => {
+    return new Promise<string | null>((resolve) => {
+      if (!workerRef.current) return resolve(null);
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'CATEGORY_SUGGESTED') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve(e.data.result);
+        }
+      };
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'SUGGEST_CATEGORY', payload: text });
+    });
   }, []);
 
   const deleteNote = useCallback((id: number) => {
     workerRef.current?.postMessage({ type: 'DELETE_NOTE', payload: id });
+  }, []);
+
+  const updateNote = useCallback((id: number, text: string, category: string) => {
+    workerRef.current?.postMessage({ type: 'UPDATE_NOTE', payload: { id, text, category } });
+  }, []);
+
+  const listCategories = useCallback(() => {
+    workerRef.current?.postMessage({ type: 'LIST_CATEGORIES' });
+  }, []);
+
+  const addCategory = useCallback((name: string) => {
+    workerRef.current?.postMessage({ type: 'ADD_CATEGORY', payload: name });
+  }, []);
+
+  const deleteCategory = useCallback((id: number) => {
+    workerRef.current?.postMessage({ type: 'DELETE_CATEGORY', payload: id });
   }, []);
 
   // Sync methods (Promise-based wrappers)
@@ -93,6 +132,24 @@ export function useWorker() {
       };
       workerRef.current.addEventListener('message', handler);
       workerRef.current.postMessage({ type: 'EXPORT' });
+    });
+  }, []);
+
+  const exportDatabase = useCallback(() => {
+    return new Promise<Blob>((resolve, reject) => {
+      if (!workerRef.current) return reject('Worker not ready');
+
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'EXPORT_DB_RESULT') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve((e.data as any).payload);
+        } else if (e.data.type === 'ERROR') {
+          workerRef.current?.removeEventListener('message', handler);
+          reject(e.data.error);
+        }
+      };
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'EXPORT_DB' });
     });
   }, []);
 
@@ -115,6 +172,24 @@ export function useWorker() {
     });
   }, []);
 
-  return { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress, exportNotes, importNotes };
+  const importDatabase = useCallback((file: File) => {
+    return new Promise<void>((resolve, reject) => {
+      if (!workerRef.current) return reject('Worker not ready');
 
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'IMPORT_DB_RESULT') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve();
+        } else if (e.data.type === 'ERROR') {
+          workerRef.current?.removeEventListener('message', handler);
+          reject(e.data.error);
+        }
+      };
+
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'IMPORT_DB', payload: file });
+    });
+  }, []);
+
+  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory };
 }

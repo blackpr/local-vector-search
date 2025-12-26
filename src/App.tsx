@@ -1,18 +1,29 @@
 import { useState, useEffect } from 'react';
 import { useWorker } from './hooks/useWorker';
-import { Search, Plus, Brain, List, RefreshCw } from 'lucide-react';
+import { Search, Plus, Brain, List, RefreshCw, Folder } from 'lucide-react';
 import clsx from 'clsx';
 import { NoteList } from './presentation/components/NoteList';
 import { AddNoteForm } from './presentation/components/AddNoteForm';
 import { SearchBar } from './presentation/components/SearchBar';
 import { StatusBadge } from './presentation/components/StatusBadge';
 import { SyncModal } from './presentation/components/SyncModal';
+import { NoteDetail } from './presentation/components/NoteDetail';
+import { CategoryManager } from './presentation/components/CategoryManager';
 
 function App() {
-    const { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress, exportNotes, importNotes } = useWorker();
+    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory } = useWorker();
     const [query, setQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list'>('search');
     const [showSyncModal, setShowSyncModal] = useState(false);
+
+    // Routing State
+    const [selectedNote, setSelectedNote] = useState<any | null>(null);
+    const [showCategoryManager, setShowCategoryManager] = useState(false);
+    const [filterCategory, setFilterCategory] = useState<string | null>(null);
+
+    // Pagination State
+    const [offset, setOffset] = useState(0);
+    const LIMIT = 20;
 
     // Debounce search
     useEffect(() => {
@@ -22,16 +33,32 @@ function App() {
         return () => clearTimeout(timer);
     }, [query, search]);
 
-    // Refresh list and clear inputs when tab changes
+    // Initial Load & Tab Change
     useEffect(() => {
         setQuery('');
-        if (activeTab === 'list') {
-            listNotes();
+        if (activeTab === 'list' && !isIndexing) {
+            // Reset pagination
+            setOffset(0);
+            listNotes(LIMIT, 0, filterCategory || undefined);
         }
-    }, [activeTab, listNotes]);
+        // Load categories on start
+        listCategories();
+    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory]);
+
+    const handleLoadMore = () => {
+        const newOffset = offset + LIMIT;
+        setOffset(newOffset);
+        listNotes(LIMIT, newOffset, filterCategory || undefined);
+    };
 
     const handleAddNote = (text: string, category: string) => {
         addNote(text, category);
+        setActiveTab('list'); // Switch to list to see it
+    };
+
+    const handleCategoryClick = (category: string) => {
+        setFilterCategory(category === filterCategory ? null : category);
+        setActiveTab('list');
     };
 
     const handleExport = async () => {
@@ -58,13 +85,142 @@ function App() {
         });
     };
 
+    // ... (rest of imports)
+
+    // View Logic
+    if (selectedNote) {
+        return (
+            <NoteDetail
+                note={selectedNote}
+                onBack={() => {
+                    setSelectedNote(null);
+                    // Refresh in case of edits/deletes
+                    listNotes(LIMIT, 0, filterCategory || undefined);
+                }}
+                onDelete={(id) => {
+                    deleteNote(id);
+                    setSelectedNote(null);
+                    listNotes(LIMIT, 0, filterCategory || undefined);
+                }}
+                onSave={async (id, text, category) => {
+                    updateNote(id, text, category);
+                    setSelectedNote(null);
+                    listNotes(LIMIT, 0, filterCategory || undefined); // Refresh list to show change
+                }}
+            />
+        );
+    }
+
+    // ... (header)
+
+    {/* Tabs */ }
+    <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md sticky top-4 z-20 backdrop-blur-md shadow-2xl shadow-black/50">
+        <button
+            onClick={() => setActiveTab('search')}
+            className={clsx(
+                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                activeTab === 'search' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
+            )}
+        >
+            <Search className="w-4 h-4" /> Search
+        </button>
+        <button
+            onClick={() => setActiveTab('list')}
+            className={clsx(
+                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
+            )}
+        >
+            <List className="w-4 h-4" /> Notes
+        </button>
+        <button
+            onClick={() => setActiveTab('add')}
+            className={clsx(
+                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                activeTab === 'add' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
+            )}
+        >
+            <Plus className="w-4 h-4" /> Add
+        </button>
+    </div>
+
+    {
+        status === 'error' && (
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center text-sm">
+                {error || 'An error occurred'}
+            </div>
+        )
+    }
+
+    {
+        activeTab === 'search' && (
+            <div className="space-y-4">
+                <SearchBar
+                    query={query}
+                    setQuery={setQuery}
+                    isIndexing={isIndexing}
+                    results={searchResults}
+                />
+            </div>
+        )
+    }
+
+    {
+        activeTab === 'list' && (
+            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="flex justify-between items-center px-2">
+                    <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
+                        {filterCategory ? (
+                            <>
+                                <span className="text-zinc-400">Category:</span>
+                                <span className="text-indigo-400">{filterCategory}</span>
+                                <button onClick={() => setFilterCategory(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
+                            </>
+                        ) : (
+                            offset > 0 ? `Notes (Page ${offset / LIMIT + 1})` : 'All Notes'
+                        )}
+                    </h2>
+                    {offset > 0 && (
+                        <button
+                            onClick={() => { setOffset(0); listNotes(LIMIT, 0, filterCategory || undefined); }}
+                            className="text-xs text-indigo-400 hover:text-indigo-300"
+                        >
+                            Back to Start
+                        </button>
+                    )}
+                </div>
+                <NoteList
+                    notes={allNotes}
+                    onDelete={deleteNote}
+                    onNoteClick={setSelectedNote}
+                    onCategoryClick={handleCategoryClick}
+                    onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                    hasMore={allNotes.length === LIMIT}
+                />
+            </div>
+        )
+    }
+
+    {
+        activeTab === 'add' && (
+            <AddNoteForm onAdd={handleAddNote} categories={categories} isProcessing={isIndexing} onAutoCategory={suggestCategory} />
+        )
+    }
+
     return (
         <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30">
             <div className="max-w-2xl mx-auto p-4 md:p-8 flex flex-col min-h-screen">
 
                 {/* Header */}
                 <header className="mb-8 text-center space-y-2 relative">
-                    <div className="absolute right-0 top-0 hidden md:block">
+                    <div className="absolute right-0 top-0 hidden md:flex items-center gap-2">
+                        <button
+                            onClick={() => setShowCategoryManager(true)}
+                            className="p-2 text-zinc-500 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                            title="Manage Categories"
+                        >
+                            <Folder className="w-5 h-5" />
+                        </button>
                         <button
                             onClick={() => setShowSyncModal(true)}
                             className="p-2 text-zinc-500 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors"
@@ -80,13 +236,20 @@ function App() {
 
                     <h1 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent flex items-center justify-center gap-4">
                         Second Brain
-                        <button
-                            onClick={() => setShowSyncModal(true)}
-                            className="md:hidden p-1 text-zinc-500 hover:text-indigo-400"
-                            title="Sync Notes"
-                        >
-                            <RefreshCw className="w-5 h-5" />
-                        </button>
+                        <div className="md:hidden flex gap-2">
+                            <button
+                                onClick={() => setShowCategoryManager(true)}
+                                className="p-1 text-zinc-500 hover:text-indigo-400"
+                            >
+                                <Folder className="w-5 h-5" />
+                            </button>
+                            <button
+                                onClick={() => setShowSyncModal(true)}
+                                className="p-1 text-zinc-500 hover:text-indigo-400"
+                            >
+                                <RefreshCw className="w-5 h-5" />
+                            </button>
+                        </div>
                     </h1>
                     <p className="text-zinc-500">
                         Offline Semantic Search Engine
@@ -101,7 +264,7 @@ function App() {
                 <main className="flex-1 flex flex-col gap-6">
 
                     {/* Tabs */}
-                    <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md">
+                    <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md sticky top-4 z-20 backdrop-blur-md">
                         <button
                             onClick={() => setActiveTab('search')}
                             className={clsx(
@@ -138,23 +301,43 @@ function App() {
                     )}
 
                     {activeTab === 'search' && (
-                        <SearchBar
-                            query={query}
-                            setQuery={setQuery}
-                            isIndexing={isIndexing}
-                            results={searchResults}
-                        />
+                        <div className="space-y-4">
+                            <SearchBar
+                                query={query}
+                                setQuery={setQuery}
+                                isIndexing={isIndexing}
+                                results={searchResults}
+                            />
+                        </div>
                     )}
 
                     {activeTab === 'list' && (
                         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <h2 className="text-xl font-semibold text-zinc-200">All Notes ({allNotes.length})</h2>
-                            <NoteList notes={allNotes} onDelete={deleteNote} />
+                            <div className="flex justify-between items-center px-2">
+                                <h2 className="text-xl font-semibold text-zinc-200">
+                                    {offset > 0 ? `Notes (Page ${offset / LIMIT + 1})` : 'All Notes'}
+                                </h2>
+                                {offset > 0 && (
+                                    <button
+                                        onClick={() => { setOffset(0); listNotes(LIMIT, 0); }}
+                                        className="text-xs text-indigo-400 hover:text-indigo-300"
+                                    >
+                                        Back to Start
+                                    </button>
+                                )}
+                            </div>
+                            <NoteList
+                                notes={allNotes}
+                                onDelete={deleteNote}
+                                onNoteClick={setSelectedNote}
+                                onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                                hasMore={allNotes.length === LIMIT}
+                            />
                         </div>
                     )}
 
                     {activeTab === 'add' && (
-                        <AddNoteForm onAdd={handleAddNote} isProcessing={isIndexing} />
+                        <AddNoteForm onAdd={handleAddNote} categories={categories} isProcessing={isIndexing} onAutoCategory={suggestCategory} />
                     )}
 
                 </main>
@@ -165,6 +348,17 @@ function App() {
                     onClose={() => setShowSyncModal(false)}
                     onExport={handleExport}
                     onImport={handleImport}
+                    onDownloadDb={exportDatabase}
+                    onUploadDb={importDatabase}
+                />
+            )}
+
+            {showCategoryManager && (
+                <CategoryManager
+                    categories={categories}
+                    onAdd={addCategory}
+                    onDelete={deleteCategory}
+                    onClose={() => setShowCategoryManager(false)}
                 />
             )}
         </div>

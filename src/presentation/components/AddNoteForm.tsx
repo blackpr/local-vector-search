@@ -3,12 +3,15 @@ import { useState } from 'react';
 
 interface AddNoteFormProps {
   onAdd: (text: string, category: string) => void;
+  categories: Array<{ id: number; name: string }>;
   isProcessing: boolean;
+  onAutoCategory?: (text: string) => Promise<string | null>;
 }
 
-export function AddNoteForm({ onAdd, isProcessing }: AddNoteFormProps) {
+export function AddNoteForm({ onAdd, categories, isProcessing }: AddNoteFormProps) {
   const [newNote, setNewNote] = useState('');
-  const [category, setCategory] = useState('Personal');
+  // Default to first category or "Personal" if generic
+  const [category, setCategory] = useState(categories[0]?.name || 'Personal');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -35,11 +38,14 @@ export function AddNoteForm({ onAdd, isProcessing }: AddNoteFormProps) {
           onChange={(e) => setCategory(e.target.value)}
           className="w-full bg-zinc-900 rounded-xl border-0 ring-1 ring-zinc-800 focus:ring-2 focus:ring-indigo-500/50 text-zinc-200 p-4"
         >
-          <option>Personal</option>
-          <option>Work</option>
-          <option>Ideas</option>
-          <option>Recipes</option>
-          <option>Journal</option>
+          {categories.length > 0 ? (
+            categories.map(cat => (
+              <option key={cat.id} value={cat.name}>{cat.name}</option>
+            ))
+          ) : (
+            // Fallback
+            <option>Personal</option>
+          )}
         </select>
       </div>
       <button

@@ -6,9 +6,11 @@ interface SyncModalProps {
   onClose: () => void;
   onExport: () => Promise<Note[]>;
   onImport: (file: File) => Promise<{ imported: number; updated: number }>;
+  onDownloadDb?: () => Promise<Blob>;
+  onUploadDb?: (file: File) => Promise<void>;
 }
 
-export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
+export function SyncModal({ onClose, onExport, onImport, onDownloadDb, onUploadDb }: SyncModalProps) {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>('export');
   const [status, setStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
@@ -43,13 +45,21 @@ export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
 
     try {
       setStatus('processing');
-      const result = await onImport(file);
+
+      if (file.name.endsWith('.sqlite') || file.name.endsWith('.db')) {
+        if (!onUploadDb) throw new Error("DB Upload not supported");
+        await onUploadDb(file);
+        setMessage('Database replaced successfully. Reloading...');
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        const result = await onImport(file);
+        setMessage(`Sync Combined: Imported ${result.imported} new, Updated ${result.updated} notes.`);
+      }
       setStatus('success');
-      setMessage(`Sync Combined: Imported ${result.imported} new, Updated ${result.updated} notes.`);
     } catch (e) {
       console.error(e);
       setStatus('error');
-      setMessage('Failed to import file. Ensure it is a valid JSON backup.');
+      setMessage('Failed to import file. ' + (e as Error).message);
     }
   };
 
@@ -70,8 +80,8 @@ export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
           <button
             onClick={() => { setActiveTab('export'); setStatus('idle'); setMessage(''); }}
             className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'export'
-                ? 'text-indigo-400 border-b-2 border-indigo-400 bg-zinc-800/50'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30'
+              ? 'text-indigo-400 border-b-2 border-indigo-400 bg-zinc-800/50'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30'
               }`}
           >
             Export (Save)
@@ -79,8 +89,8 @@ export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
           <button
             onClick={() => { setActiveTab('import'); setStatus('idle'); setMessage(''); }}
             className={`flex-1 py-3 text-sm font-medium transition-colors ${activeTab === 'import'
-                ? 'text-indigo-400 border-b-2 border-indigo-400 bg-zinc-800/50'
-                : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30'
+              ? 'text-indigo-400 border-b-2 border-indigo-400 bg-zinc-800/50'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/30'
               }`}
           >
             Import (Load)
@@ -105,7 +115,31 @@ export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
                 disabled={status === 'processing'}
                 className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {status === 'processing' ? 'Exporting...' : 'Download Sync File'}
+                {status === 'processing' ? 'Exporting...' : 'Download JSON Backup'}
+              </button>
+
+              <button
+                onClick={async () => {
+                  if (onDownloadDb) {
+                    try {
+                      const blob = await onDownloadDb();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `notes_db_${new Date().toISOString().split('T')[0]}.sqlite`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      console.error(e);
+                      alert("Failed to download DB");
+                    }
+                  }
+                }}
+                className="w-full py-2 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg font-medium transition-colors flex items-center justify-center gap-2 border border-zinc-700"
+              >
+                Download Raw DB (.sqlite)
               </button>
             </div>
           ) : (
@@ -124,15 +158,35 @@ export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
                 type="file"
                 ref={fileInputRef}
                 className="hidden"
-                accept=".json"
+                accept=".json,.sqlite,.db"
                 onChange={handleFileSelect}
               />
               <button
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => {
+                  // Trigger for JSON
+                  if (fileInputRef.current) {
+                    fileInputRef.current.accept = ".json";
+                    fileInputRef.current.click();
+                  }
+                }}
                 disabled={status === 'processing'}
                 className="w-full py-2 px-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {status === 'processing' ? 'Processing...' : 'Select File to Import'}
+                {status === 'processing' ? 'Processing...' : 'Import from JSON'}
+              </button>
+
+              <button
+                onClick={() => {
+                  // Trigger for DB
+                  if (fileInputRef.current) {
+                    fileInputRef.current.accept = ".sqlite,.db";
+                    fileInputRef.current.click();
+                  }
+                }}
+                disabled={status === 'processing' || !onUploadDb}
+                className="w-full py-2 px-4 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 border border-zinc-700"
+              >
+                Import Raw DB (.sqlite)
               </button>
             </div>
           )}
@@ -140,7 +194,7 @@ export function SyncModal({ onClose, onExport, onImport }: SyncModalProps) {
           {/* Status Messages */}
           {message && (
             <div className={`mt-6 p-3 rounded-lg flex items-start gap-3 border ${status === 'success' ? 'bg-green-500/10 border-green-500/20 text-green-400' :
-                status === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-zinc-800 border-zinc-700 text-zinc-300'
+              status === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-zinc-800 border-zinc-700 text-zinc-300'
               }`}>
               {status === 'success' && <Check className="w-5 h-5 flex-shrink-0" />}
               {status === 'error' && <AlertCircle className="w-5 h-5 flex-shrink-0" />}

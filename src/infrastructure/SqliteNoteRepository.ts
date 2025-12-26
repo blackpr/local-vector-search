@@ -1,8 +1,10 @@
 import type { Note, NewNote } from '../domain/Note';
 import type { NoteRepository } from '../domain/NoteRepository';
 import type { SearchService, SearchResult } from '../domain/SearchService';
+import type { Category } from '../domain/Category';
+import type { CategoryRepository } from '../domain/CategoryRepository';
 
-export class SqliteNoteRepository implements NoteRepository, SearchService {
+export class SqliteNoteRepository implements NoteRepository, SearchService, CategoryRepository {
   private db: any;
 
   constructor(db: any) {
@@ -15,30 +17,51 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_notes USING vec0(
         embedding float[768]
       );
+      CREATE TABLE IF NOT EXISTS categories(
+        id INTEGER PRIMARY KEY,
+        name TEXT UNIQUE NOT NULL
+      );
       CREATE TABLE IF NOT EXISTS notes(
         rowid INTEGER PRIMARY KEY,
         text TEXT,
-        category TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        category TEXT, -- Legacy column
+        category_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        uuid TEXT UNIQUE,
+        FOREIGN KEY(category_id) REFERENCES categories(id)
       );
     `);
 
-    // Check for new columns and migrate if necessary
+    // Migrations
     const columns = this.db.selectObjects('PRAGMA table_info(notes)');
     const hasUuid = columns.some((c: any) => c.name === 'uuid');
     const hasUpdatedAt = columns.some((c: any) => c.name === 'updated_at');
+    const hasCategoryId = columns.some((c: any) => c.name === 'category_id');
 
-    if (!hasUuid) {
-      console.log('Migrating: Adding uuid column to notes table');
-      this.db.exec('ALTER TABLE notes ADD COLUMN uuid TEXT');
+    if (!hasUuid) this.db.exec('ALTER TABLE notes ADD COLUMN uuid TEXT');
+    if (!hasUpdatedAt) this.db.exec('ALTER TABLE notes ADD COLUMN updated_at DATETIME');
+
+    if (!hasCategoryId) {
+      console.log('Migrating: Adding category_id column to notes table');
+      this.db.exec('ALTER TABLE notes ADD COLUMN category_id INTEGER REFERENCES categories(id)');
+      this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_id ON notes(category_id)');
+
+      // Populate categories from existing text
+      this.db.exec(`
+            INSERT OR IGNORE INTO categories(name) 
+            SELECT DISTINCT category FROM notes WHERE category IS NOT NULL;
+        `);
+
+      // Backfill category_id
+      this.db.exec(`
+            UPDATE notes 
+            SET category_id = (SELECT id FROM categories WHERE categories.name = notes.category)
+            WHERE category IS NOT NULL AND category_id IS NULL;
+        `);
     }
 
-    if (!hasUpdatedAt) {
-      console.log('Migrating: Adding updated_at column to notes table');
-      this.db.exec('ALTER TABLE notes ADD COLUMN updated_at DATETIME');
-    }
-
-    // Migration: Backfill UUIDs for existing notes that might have NULL (from new column addition or legacy)
+    // Backfill UUIDs
     const notesWithoutUuid = this.db.selectObjects('SELECT rowid FROM notes WHERE uuid IS NULL');
     if (notesWithoutUuid.length > 0) {
       this.db.transaction(() => {
@@ -49,14 +72,50 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
           });
         }
       });
-      console.log(`Migrated ${notesWithoutUuid.length} notes with UUIDs`);
     }
 
-    // Ensure Unique Index (Idempotent)
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_uuid ON notes(uuid)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_id ON notes(category_id)');
   }
 
-  // Helper: Convert Float32Array to Uint8Array for SQLite BLOB binding
+  // --- CategoryRepository Implementation ---
+
+  async findAllCategories(): Promise<Category[]> {
+    if (!this.db) throw new Error('Database not initialized');
+    const rows = this.db.selectObjects('SELECT id, name FROM categories ORDER BY name ASC');
+    return rows as Category[];
+  }
+
+  async create(name: string): Promise<Category> {
+    if (!this.db) throw new Error('Database not initialized');
+    // Check existing
+    const existing = this.db.selectObject('SELECT id, name FROM categories WHERE name = ?', [name]);
+    if (existing) return existing as Category;
+
+    this.db.exec({
+      sql: 'INSERT INTO categories(name) VALUES (?)',
+      bind: [name]
+    });
+    const id = this.db.selectValue('SELECT last_insert_rowid()');
+    return { id, name };
+  }
+
+  async deleteCategory(id: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.exec({ sql: 'DELETE FROM categories WHERE id = ?', bind: [id] });
+  }
+
+  // NoteRepository.delete
+  async delete(id: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.transaction(() => {
+      this.db.exec({ sql: 'DELETE FROM notes WHERE rowid = ?', bind: [id] });
+      this.db.exec({ sql: 'DELETE FROM vec_notes WHERE rowid = ?', bind: [id] });
+    });
+  }
+
+  // --- NoteRepository Implementation ---
+
   private toSqliteBlob(vector: any): Uint8Array {
     if (vector instanceof Float32Array) {
       return new Uint8Array(vector.buffer, vector.byteOffset, vector.byteLength);
@@ -66,23 +125,27 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
 
   async save(note: NewNote, embedding?: Float32Array): Promise<Note> {
     if (!this.db) throw new Error('Database not initialized');
-    if (!embedding) throw new Error('Embedding is required for saving a note');
+    if (!embedding) throw new Error('Embedding is required');
 
     let rowId: number = 0;
     const uuid = note.uuid || crypto.randomUUID();
     const now = new Date().toISOString();
 
-    // Transaction to ensure data integrity
     this.db.transaction(() => {
-      // 1. Insert actual text into normal table
+      let categoryId: number | null = null;
+      if (note.category) {
+        this.db.exec({ sql: 'INSERT OR IGNORE INTO categories(name) VALUES (?)', bind: [note.category] });
+        const catResult = this.db.selectObject('SELECT id FROM categories WHERE name = ?', [note.category]);
+        categoryId = catResult ? catResult.id : null;
+      }
+
       this.db.exec({
-        sql: 'INSERT INTO notes(uuid, text, category, updated_at) VALUES (?, ?, ?, ?)',
-        bind: [uuid, note.text, note.category, now],
+        sql: 'INSERT INTO notes(uuid, text, category, category_id, updated_at) VALUES (?, ?, ?, ?, ?)',
+        bind: [uuid, note.text, note.category, categoryId, now],
       });
 
       rowId = this.db.selectValue('SELECT last_insert_rowid()');
 
-      // 2. Insert vector into vector table
       const stmt = this.db.prepare('INSERT INTO vec_notes(rowid, embedding) VALUES (?, ?)');
       try {
         stmt.bind([rowId, this.toSqliteBlob(embedding)]);
@@ -92,7 +155,6 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
       }
     });
 
-    // Return the saved note with the generated ID
     return {
       id: rowId,
       uuid,
@@ -103,28 +165,73 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
     };
   }
 
-  async delete(id: number): Promise<void> {
+  async update(note: Note): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
 
-    this.db.transaction(() => {
+    // Note: We are only updating text/category metadata here. 
+    // We are NOT updating the vector embedding for now to keep things simpler 
+    // and as we don't have the embedding service here.
+    // Ideally, the Application Layer should handle re-embedding and pass it, 
+    // or this method should accept an optional embedding.
+    // For now, we accept that edited notes might have stale embeddings until re-indexed.
+
+    const now = new Date().toISOString();
+
+    // 1. Ensure Category exists
+    let categoryId: number | null = null;
+    if (note.category) {
       this.db.exec({
-        sql: 'DELETE FROM notes WHERE rowid = ?',
-        bind: [id],
+        sql: 'INSERT OR IGNORE INTO categories(name) VALUES (?)',
+        bind: [note.category]
       });
-      this.db.exec({
-        sql: 'DELETE FROM vec_notes WHERE rowid = ?',
-        bind: [id],
-      });
+      const catResult = this.db.selectObject('SELECT id FROM categories WHERE name = ?', [note.category]);
+      categoryId = catResult ? catResult.id : null;
+    }
+
+    // 2. Update Note
+    this.db.exec({
+      sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, updated_at = ? WHERE rowid = ?`,
+      bind: [note.text, note.category, categoryId, now, note.id]
     });
   }
 
-  async findAll(): Promise<Note[]> {
+  async findAll(limit: number = 20, offset: number = 0, category?: string): Promise<Note[]> {
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
 
-    const stmt = this.db.prepare(
-      'SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes ORDER BY created_at DESC'
-    );
+    let sql = 'SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    let bind: any[] = [limit, offset];
+
+    if (category) {
+      sql = 'SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes WHERE category = ? ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      bind = [category, limit, offset];
+    }
+
+    const stmt = this.db.prepare(sql);
+    try {
+      stmt.bind(bind as any[]);
+      while (stmt.step()) {
+        const row = stmt.get({}) as any;
+        results.push({
+          id: row.id,
+          uuid: row.uuid,
+          text: row.text,
+          category: row.category,
+          createdAt: new Date(row.created_at),
+          updatedAt: new Date(row.updated_at),
+        });
+      }
+    } finally {
+      stmt.finalize();
+    }
+    return results;
+  }
+
+  async exportAll(): Promise<Note[]> {
+    if (!this.db) throw new Error('Database not initialized');
+    const results: Note[] = [];
+    // No limit
+    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes ORDER BY created_at DESC');
     try {
       while (stmt.step()) {
         const row = stmt.get({}) as any;
@@ -140,12 +247,35 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
     } finally {
       stmt.finalize();
     }
-
     return results;
   }
 
-  async exportAll(): Promise<Note[]> {
-    return this.findAll();
+  close() {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
+    }
+  }
+
+  async exportDatabase(): Promise<Blob> {
+    if (!this.db) throw new Error('Database not initialized');
+    try {
+      // Try memory export first (works if DB is in memory or if sqlite3.oo1.OpfsDb supports it via some polyfill/extension, but usually not)
+      // Actually `export()` is a method on the OO1 DB instance in some builds, but for OPFS we might need to read the file.
+      try {
+        const byteArray = this.db.export();
+        return new Blob([byteArray], { type: 'application/x-sqlite3' });
+      } catch (innerErr) {
+        // If .export() fails, assume OPFS and try reading the file directly
+        const root = await navigator.storage.getDirectory();
+        const fileHandle = await root.getFileHandle('notes.db');
+        const file = await fileHandle.getFile();
+        return file;
+      }
+    } catch (e) {
+      console.error('Failed to export raw DB:', e);
+      throw new Error('Current database configuration does not support raw export');
+    }
   }
 
   async merge(
@@ -153,7 +283,6 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
     embeddingService: { generateEmbedding: (text: string) => Promise<Float32Array> }
   ): Promise<{ imported: number; updated: number }> {
     if (!this.db) throw new Error('Database not initialized');
-
     let importedCount = 0;
     let updatedCount = 0;
 
@@ -161,7 +290,6 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
       const existing = this.db.selectObject('SELECT rowid, updated_at, text FROM notes WHERE uuid = ?', [importedNote.uuid]);
 
       if (!existing) {
-        // New Note -> Insert
         const embedding = await embeddingService.generateEmbedding(importedNote.text);
         await this.save({
           uuid: importedNote.uuid,
@@ -169,39 +297,36 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
           category: importedNote.category
         }, embedding);
 
-        // Fix the timestamps to match imported ones (save() uses 'now')
         this.db.exec({
           sql: 'UPDATE notes SET created_at = ?, updated_at = ? WHERE uuid = ?',
           bind: [importedNote.createdAt, importedNote.updatedAt, importedNote.uuid]
         });
         importedCount++;
       } else {
-        // Conflict Resolution: LWW (Last Write Wins)
         const localUpdated = new Date(existing.updated_at).getTime();
         const remoteUpdated = new Date(importedNote.updatedAt).getTime();
 
         if (remoteUpdated > localUpdated) {
-          // Remote is newer -> Update
           const needsEmbeddingUpdate = existing.text !== importedNote.text;
 
           this.db.transaction(() => {
-            this.db.exec({
-              sql: 'UPDATE notes SET text = ?, category = ?, updated_at = ? WHERE uuid = ?',
-              bind: [importedNote.text, importedNote.category, importedNote.updatedAt, importedNote.uuid]
-            });
-
-            if (needsEmbeddingUpdate) {
-              // We'll update embedding outside transaction to handle promise, or refactor. 
-              // Since transactions in sqlite-wasm are synchronous-ish for the DB lock but logic is async...
-              // Actually, we must await embedding before transaction or use a separate step.
+            // Also need to handle category_id update if category text changed!
+            let categoryId: number | null = null;
+            if (importedNote.category) {
+              this.db.exec({ sql: 'INSERT OR IGNORE INTO categories(name) VALUES (?)', bind: [importedNote.category] });
+              const catResult = this.db.selectObject('SELECT id FROM categories WHERE name = ?', [importedNote.category]);
+              categoryId = catResult ? catResult.id : null;
             }
+
+            this.db.exec({
+              sql: 'UPDATE notes SET text = ?, category = ?, category_id = ?, updated_at = ? WHERE uuid = ?',
+              bind: [importedNote.text, importedNote.category, categoryId, importedNote.updatedAt, importedNote.uuid]
+            });
           });
 
           if (needsEmbeddingUpdate) {
             const embedding = await embeddingService.generateEmbedding(importedNote.text);
             const rowId = existing.rowid;
-            // Update vector: Delete & Insert (vec0 doesn't support generic UPDATE easily usually, or does it? 
-            // vec0 supports DELETE and INSERT. UPDATE is supported in newer versions but DELETE+INSERT is safest.
             this.db.exec('DELETE FROM vec_notes WHERE rowid = ?', [rowId]);
             const stmt = this.db.prepare('INSERT INTO vec_notes(rowid, embedding) VALUES (?, ?)');
             try {
@@ -220,7 +345,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
 
   async search(_query: string, limit: number = 10, queryEmbedding?: Float32Array): Promise<SearchResult[]> {
     if (!this.db) throw new Error('Database not initialized');
-    if (!queryEmbedding) throw new Error('Query embedding is required for search');
+    if (!queryEmbedding) throw new Error('Query embedding is required');
 
     const sql = `
       SELECT 
@@ -242,10 +367,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
 
     try {
       stmt.bind([this.toSqliteBlob(queryEmbedding), limit]);
-
       while (stmt.step()) {
         const row = stmt.get({}) as any;
-        // Filter out results with poor matching score (distance >= 1.0 means score <= 0%)
         if (row.distance < 1.0) {
           results.push({
             id: row.id,
@@ -261,7 +384,6 @@ export class SqliteNoteRepository implements NoteRepository, SearchService {
     } finally {
       stmt.finalize();
     }
-
     return results;
   }
 }
