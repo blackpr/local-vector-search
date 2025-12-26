@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Build artifacts (will be rebuilt)
+dist
+
+# Development files
+.git
+.gitignore
+.prettierrc
+.eslintrc
+eslint.config.js
+
+# Documentation (optional - remove if you want docs deployed)
+docs
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Testing
+coverage
+.nyc_output
+
+# Environment
+.env.local
+.env.*.local
