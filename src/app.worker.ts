@@ -1,5 +1,6 @@
 import { AddNoteUseCase } from './application/AddNoteUseCase';
 import { DeleteNoteUseCase } from './application/DeleteNoteUseCase';
+import { RestoreNoteUseCase } from './application/RestoreNoteUseCase';
 import { ListNotesUseCase } from './application/ListNotesUseCase';
 import { ManageCategoriesUseCase } from './application/ManageCategoriesUseCase';
 import { SearchNotesUseCase } from './application/SearchNotesUseCase';
@@ -24,6 +25,7 @@ let addNoteUseCase: AddNoteUseCase;
 let searchNotesUseCase: SearchNotesUseCase;
 let listNotesUseCase: ListNotesUseCase;
 let deleteNoteUseCase: DeleteNoteUseCase;
+let restoreNoteUseCase: RestoreNoteUseCase;
 let manageCategoriesUseCase: ManageCategoriesUseCase;
 let getNoteUseCase: GetNoteUseCase;
 let updateNoteUseCase: UpdateNoteUseCase;
@@ -74,6 +76,7 @@ async function initialize() {
     searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
     listNotesUseCase = new ListNotesUseCase(noteRepository);
     deleteNoteUseCase = new DeleteNoteUseCase(noteRepository);
+    restoreNoteUseCase = new RestoreNoteUseCase(noteRepository);
     manageCategoriesUseCase = new ManageCategoriesUseCase(noteRepository);
     getNoteUseCase = new GetNoteUseCase(noteRepository);
     updateNoteUseCase = new UpdateNoteUseCase(noteRepository);
@@ -146,6 +149,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const payload = (e.data as any).payload;
       await deleteNoteUseCase.execute(payload);
       self.postMessage({ type: 'NOTE_DELETED', id: payload } as WorkerResponse);
+    } else if (type === 'RESTORE_NOTE') {
+      if (!restoreNoteUseCase) throw new Error('Not initialized');
+      const payload = (e.data as any).payload;
+      await restoreNoteUseCase.execute(payload);
+      self.postMessage({ type: 'NOTE_RESTORED', id: payload } as WorkerResponse);
     } else if (type === 'UPDATE_NOTE') {
       if (!updateNoteUseCase) throw new Error('Not initialized');
       const note = (e.data as any).payload;

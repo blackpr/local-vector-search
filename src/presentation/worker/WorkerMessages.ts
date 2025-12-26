@@ -4,6 +4,7 @@ export type WorkerMessage =
   | { type: 'SEARCH'; payload: { query: string; limit?: number; offset?: number } }
   | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string; tag?: string; pinned?: boolean } }
   | { type: 'DELETE_NOTE'; payload: number }
+  | { type: 'RESTORE_NOTE'; payload: number }
   | { type: 'UPDATE_NOTE'; payload: any }
   | { type: 'LIST_CATEGORIES' }
   | { type: 'ADD_CATEGORY'; payload: string }
@@ -23,6 +24,7 @@ export type WorkerResponse =
   | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }
   | { type: 'NOTES_LISTED'; results: Array<{ id: number; text: string; category: string; created_at: string }> }
   | { type: 'NOTE_DELETED'; id: number }
+  | { type: 'NOTE_RESTORED'; id: number }
   | { type: 'CATEGORIES_LISTED'; results: Array<{ id: number; name: string }> }
   | { type: 'CATEGORY_ADDED'; result: { id: number; name: string } }
   | { type: 'CATEGORY_DELETED'; id: number }

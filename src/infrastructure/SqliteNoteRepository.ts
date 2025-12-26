@@ -30,6 +30,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         is_pinned INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME,
         uuid TEXT UNIQUE,
         FOREIGN KEY(category_id) REFERENCES categories(id)
       );
@@ -42,11 +43,13 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     const hasCategoryId = columns.some((c: any) => c.name === 'category_id');
     const hasTags = columns.some((c: any) => c.name === 'tags');
     const hasIsPinned = columns.some((c: any) => c.name === 'is_pinned');
+    const hasDeletedAt = columns.some((c: any) => c.name === 'deleted_at');
 
     if (!hasUuid) this.db.exec('ALTER TABLE notes ADD COLUMN uuid TEXT');
     if (!hasUpdatedAt) this.db.exec('ALTER TABLE notes ADD COLUMN updated_at DATETIME');
     if (!hasTags) this.db.exec('ALTER TABLE notes ADD COLUMN tags TEXT');
     if (!hasIsPinned) this.db.exec('ALTER TABLE notes ADD COLUMN is_pinned INTEGER DEFAULT 0');
+    if (!hasDeletedAt) this.db.exec('ALTER TABLE notes ADD COLUMN deleted_at DATETIME');
 
     if (!hasCategoryId) {
       console.log('Migrating: Adding category_id column to notes table');
@@ -85,6 +88,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_created_at ON notes(category, created_at DESC)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_is_pinned_created_at ON notes(is_pinned, created_at DESC)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_deleted_at ON notes(deleted_at)');
   }
 
   // ... (CategoryRepository impl unchanged)
@@ -113,19 +117,29 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     this.db.exec({ sql: 'DELETE FROM categories WHERE id = ?', bind: [id] });
   }
 
-  // NoteRepository.delete
+  // NoteRepository.delete - Soft delete
   async delete(id: number): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
-    this.db.transaction(() => {
-      this.db.exec({ sql: 'DELETE FROM notes WHERE rowid = ?', bind: [id] });
-      this.db.exec({ sql: 'DELETE FROM vec_notes WHERE rowid = ?', bind: [id] });
+    const now = new Date().toISOString();
+    this.db.exec({
+      sql: 'UPDATE notes SET deleted_at = ? WHERE rowid = ?',
+      bind: [now, id]
+    });
+  }
+
+  // NoteRepository.restore - Undo soft delete
+  async restore(id: number): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.exec({
+      sql: 'UPDATE notes SET deleted_at = NULL WHERE rowid = ?',
+      bind: [id]
     });
   }
 
   async findById(id: number): Promise<Note | null> {
     if (!this.db) throw new Error('Database not initialized');
     const row = this.db.selectObject(
-      'SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at FROM notes WHERE rowid = ?',
+      'SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at, deleted_at FROM notes WHERE rowid = ? AND deleted_at IS NULL',
       [id]
     ) as any;
 
@@ -145,6 +159,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       isPinned: !!row.is_pinned,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
+      deletedAt: row.deleted_at ? new Date(row.deleted_at) : undefined,
     };
   }
 
@@ -231,8 +246,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
 
-    let sql = 'SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at FROM notes';
-    const conditions: string[] = [];
+    let sql = 'SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at, deleted_at FROM notes';
+    const conditions: string[] = ['deleted_at IS NULL'];
     const bind: any[] = [];
 
     if (category) {
@@ -280,6 +295,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
           isPinned: !!row.is_pinned,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
+          deletedAt: row.deleted_at ? new Date(row.deleted_at) : undefined,
         });
       }
     } finally {
@@ -291,7 +307,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
   async exportAll(): Promise<Note[]> {
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
-    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at FROM notes ORDER BY created_at DESC');
+    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at, deleted_at FROM notes WHERE deleted_at IS NULL ORDER BY created_at DESC');
     try {
       while (stmt.step()) {
         const row = stmt.get({}) as any;
@@ -309,6 +325,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
           isPinned: !!row.is_pinned,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
+          deletedAt: row.deleted_at ? new Date(row.deleted_at) : undefined,
         });
       }
     } finally {
@@ -422,9 +439,11 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         notes.is_pinned,
         notes.created_at,
         notes.updated_at,
+        notes.deleted_at,
         vec_distance_L2(vec_notes.embedding, ?) as distance 
       FROM vec_notes 
       LEFT JOIN notes ON vec_notes.rowid = notes.rowid
+      WHERE notes.deleted_at IS NULL
       ORDER BY distance ASC 
       LIMIT ? OFFSET ?
     `;
@@ -449,6 +468,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
             isPinned: !!row.is_pinned,
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at),
+            deletedAt: row.deleted_at ? new Date(row.deleted_at) : undefined,
             distance: row.distance,
           });
         }

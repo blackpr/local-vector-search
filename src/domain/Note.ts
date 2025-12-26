@@ -7,6 +7,7 @@ export interface Note {
   isPinned?: boolean;
   createdAt: Date;
   updatedAt: Date;
+  deletedAt?: Date;
 }
 
 export type NewNote = Omit<Note, 'id' | 'createdAt' | 'updatedAt'> & { uuid?: string };

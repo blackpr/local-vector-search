@@ -4,6 +4,7 @@ import { useUrlSync } from './hooks/useUrlSync';
 import { NoteDetail } from './presentation/components/NoteDetail';
 import { SyncModal } from './presentation/components/SyncModal';
 import { CategoryManager } from './presentation/components/CategoryManager';
+import { Toast } from './presentation/components/Toast';
 import { AppLayout } from './presentation/components/Layout/AppLayout';
 import { Header } from './presentation/components/Layout/Header';
 import { Navigation } from './presentation/components/Layout/Navigation';
@@ -12,7 +13,7 @@ import { NoteListView } from './presentation/views/NoteListView';
 import { AddNoteView } from './presentation/views/AddNoteView';
 
 function App() {
-    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
+    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
 
     // UI State
     const [query, setQuery] = useState('');
@@ -31,6 +32,11 @@ function App() {
     // Pagination
     const [offset, setOffset] = useState(0);
     const LIMIT = 20;
+
+    // Toast state for undo delete
+    const [deletedNoteId, setDeletedNoteId] = useState<number | null>(null);
+    const [showUndoToast, setShowUndoToast] = useState(false);
+    const [toastTimeoutId, setToastTimeoutId] = useState<NodeJS.Timeout | null>(null);
 
     // URL Sync Hook
     useUrlSync({
@@ -147,6 +153,60 @@ function App() {
         setOffset(0);
     };
 
+    // Delete with undo functionality
+    const handleDeleteWithUndo = (id: number) => {
+        // Clear any existing toast timeout
+        if (toastTimeoutId) {
+            clearTimeout(toastTimeoutId);
+        }
+
+        // Perform the delete
+        deleteNote(id);
+        setDeletedNoteId(id);
+        setShowUndoToast(true);
+
+        // Auto-dismiss after 10 seconds
+        const timeoutId = setTimeout(() => {
+            setShowUndoToast(false);
+            setDeletedNoteId(null);
+            setToastTimeoutId(null);
+        }, 10000);
+        setToastTimeoutId(timeoutId);
+    };
+
+    const handleUndo = () => {
+        if (deletedNoteId) {
+            // Clear the timeout
+            if (toastTimeoutId) {
+                clearTimeout(toastTimeoutId);
+                setToastTimeoutId(null);
+            }
+
+            // Restore the note
+            restoreNote(deletedNoteId);
+            setShowUndoToast(false);
+            setDeletedNoteId(null);
+
+            // Refresh current view
+            if (activeTab === 'list') {
+                listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
+            } else if (activeTab === 'search') {
+                search(query, LIMIT, offset);
+            } else if (activeTab === 'pinned') {
+                listNotes(LIMIT, offset, undefined, undefined, true);
+            }
+        }
+    };
+
+    const handleDismissToast = () => {
+        if (toastTimeoutId) {
+            clearTimeout(toastTimeoutId);
+            setToastTimeoutId(null);
+        }
+        setShowUndoToast(false);
+        setDeletedNoteId(null);
+    };
+
     // If viewing a note detail
     if (selectedNote) {
         return (
@@ -159,7 +219,7 @@ function App() {
                             listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
                         }}
                         onDelete={(id) => {
-                            deleteNote(id);
+                            handleDeleteWithUndo(id);
                             setSelectedNote(null);
                             listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
                         }}
@@ -209,7 +269,7 @@ function App() {
                         offset={offset}
                         LIMIT={LIMIT}
                         search={search}
-                        deleteNote={deleteNote}
+                        deleteNote={handleDeleteWithUndo}
                         setSelectedNote={setSelectedNote}
                         setFilterCategory={handleCategoryClick}
                         setFilterTag={handleTagClick}
@@ -241,7 +301,7 @@ function App() {
                         notes={allNotes}
                         offset={offset}
                         onResetOffset={() => { setOffset(0); listNotes(LIMIT, 0); }}
-                        onDelete={deleteNote}
+                        onDelete={handleDeleteWithUndo}
                         onNoteClick={setSelectedNote}
                         onCategoryClick={handleCategoryClick}
                         onTagClick={handleTagClick}
@@ -257,7 +317,7 @@ function App() {
                         notes={allNotes.filter(n => n.isPinned)}
                         offset={offset}
                         onResetOffset={() => { setOffset(0); listNotes(LIMIT, 0, undefined, undefined, true); }}
-                        onDelete={deleteNote}
+                        onDelete={handleDeleteWithUndo}
                         onNoteClick={setSelectedNote}
                         onCategoryClick={handleCategoryClick}
                         onTagClick={handleTagClick}
@@ -294,6 +354,14 @@ function App() {
                     onAdd={addCategory}
                     onDelete={deleteCategory}
                     onClose={() => setShowCategoryManager(false)}
+                />
+            )}
+
+            {showUndoToast && (
+                <Toast
+                    message="Note deleted"
+                    onUndo={handleUndo}
+                    onDismiss={handleDismissToast}
                 />
             )}
         </AppLayout>

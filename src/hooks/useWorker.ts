@@ -46,7 +46,9 @@ export function useWorker() {
         const id = (e.data as any).id;
         setAllNotes(prev => prev.filter(note => note.id !== id));
         setSearchResults(prev => prev.filter(note => note.id !== id));
-
+      } else if (type === 'NOTE_RESTORED') {
+        // Note restored - refresh lists to show it again
+        // The worker will handle the actual restoration, we just need to refresh
       } else if (type === 'ERROR') {
         setStatus('error');
         setError((e.data as any).error);
@@ -111,6 +113,10 @@ export function useWorker() {
 
   const deleteNote = useCallback((id: number) => {
     workerRef.current?.postMessage({ type: 'DELETE_NOTE', payload: id });
+  }, []);
+
+  const restoreNote = useCallback((id: number) => {
+    workerRef.current?.postMessage({ type: 'RESTORE_NOTE', payload: id });
   }, []);
 
   const updateNote = useCallback((id: number, text: string, category: string, tags: string[] = [], isPinned?: boolean) => {
@@ -232,5 +238,5 @@ export function useWorker() {
     });
   }, []);
 
-  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
+  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
 }
