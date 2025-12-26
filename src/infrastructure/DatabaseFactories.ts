@@ -15,7 +15,7 @@ export class DatabaseFactory {
       const isSecure = typeof self !== 'undefined' && self.crossOriginIsolated;
       const hasSharedArrayBuffer = typeof SharedArrayBuffer !== 'undefined';
 
-      console.log(`DB Factory: Secure=${isSecure}, SAB=${hasSharedArrayBuffer}`);
+      console.log(`DB Factory: Secure = ${isSecure}, SAB = ${hasSharedArrayBuffer} `);
 
       try {
         if (isSecure && hasSharedArrayBuffer && 'opfs' in sqlite3) {

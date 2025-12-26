@@ -22,6 +22,7 @@ export default defineConfig({
   },
   build: {
     target: 'esnext',
+    assetsInlineLimit: 0, // Ensure no wasm is inlined as base64
   }
 })
 
