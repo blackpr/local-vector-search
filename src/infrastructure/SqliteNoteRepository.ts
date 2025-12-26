@@ -26,6 +26,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         text TEXT,
         category TEXT, -- Legacy column
         category_id INTEGER,
+        tags TEXT, -- JSON array of strings
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         uuid TEXT UNIQUE,
@@ -38,9 +39,11 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     const hasUuid = columns.some((c: any) => c.name === 'uuid');
     const hasUpdatedAt = columns.some((c: any) => c.name === 'updated_at');
     const hasCategoryId = columns.some((c: any) => c.name === 'category_id');
+    const hasTags = columns.some((c: any) => c.name === 'tags');
 
     if (!hasUuid) this.db.exec('ALTER TABLE notes ADD COLUMN uuid TEXT');
     if (!hasUpdatedAt) this.db.exec('ALTER TABLE notes ADD COLUMN updated_at DATETIME');
+    if (!hasTags) this.db.exec('ALTER TABLE notes ADD COLUMN tags TEXT');
 
     if (!hasCategoryId) {
       console.log('Migrating: Adding category_id column to notes table');
@@ -61,7 +64,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         `);
     }
 
-    // Backfill UUIDs
+    // Backfill UUIDs and indexes...
     const notesWithoutUuid = this.db.selectObjects('SELECT rowid FROM notes WHERE uuid IS NULL');
     if (notesWithoutUuid.length > 0) {
       this.db.transaction(() => {
@@ -78,7 +81,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_id ON notes(category_id)');
   }
 
-  // --- CategoryRepository Implementation ---
+  // ... (CategoryRepository impl unchanged)
 
   async findAllCategories(): Promise<Category[]> {
     if (!this.db) throw new Error('Database not initialized');
@@ -88,7 +91,6 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
 
   async create(name: string): Promise<Category> {
     if (!this.db) throw new Error('Database not initialized');
-    // Check existing
     const existing = this.db.selectObject('SELECT id, name FROM categories WHERE name = ?', [name]);
     if (existing) return existing as Category;
 
@@ -130,6 +132,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     let rowId: number = 0;
     const uuid = note.uuid || crypto.randomUUID();
     const now = new Date().toISOString();
+    const tagsJson = JSON.stringify(note.tags || []);
 
     this.db.transaction(() => {
       let categoryId: number | null = null;
@@ -140,8 +143,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       }
 
       this.db.exec({
-        sql: 'INSERT INTO notes(uuid, text, category, category_id, updated_at) VALUES (?, ?, ?, ?, ?)',
-        bind: [uuid, note.text, note.category, categoryId, now],
+        sql: 'INSERT INTO notes(uuid, text, category, category_id, tags, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+        bind: [uuid, note.text, note.category, categoryId, tagsJson, now],
       });
 
       rowId = this.db.selectValue('SELECT last_insert_rowid()');
@@ -160,6 +163,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       uuid,
       text: note.text,
       category: note.category,
+      tags: note.tags || [],
       createdAt: new Date(),
       updatedAt: new Date(now),
     };
@@ -167,15 +171,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
 
   async update(note: Note): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
-
-    // Note: We are only updating text/category metadata here. 
-    // We are NOT updating the vector embedding for now to keep things simpler 
-    // and as we don't have the embedding service here.
-    // Ideally, the Application Layer should handle re-embedding and pass it, 
-    // or this method should accept an optional embedding.
-    // For now, we accept that edited notes might have stale embeddings until re-indexed.
-
     const now = new Date().toISOString();
+    const tagsJson = JSON.stringify(note.tags || []);
 
     // 1. Ensure Category exists
     let categoryId: number | null = null;
@@ -190,8 +187,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
 
     // 2. Update Note
     this.db.exec({
-      sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, updated_at = ? WHERE rowid = ?`,
-      bind: [note.text, note.category, categoryId, now, note.id]
+      sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, updated_at = ? WHERE rowid = ?`,
+      bind: [note.text, note.category, categoryId, tagsJson, now, note.id]
     });
   }
 
@@ -199,11 +196,11 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
 
-    let sql = 'SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    let sql = 'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes ORDER BY created_at DESC LIMIT ? OFFSET ?';
     let bind: any[] = [limit, offset];
 
     if (category) {
-      sql = 'SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes WHERE category = ? ORDER BY created_at DESC LIMIT ? OFFSET ?';
+      sql = 'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes WHERE category = ? ORDER BY created_at DESC LIMIT ? OFFSET ?';
       bind = [category, limit, offset];
     }
 
@@ -212,11 +209,17 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       stmt.bind(bind as any[]);
       while (stmt.step()) {
         const row = stmt.get({}) as any;
+        let tags: string[] = [];
+        try {
+          tags = row.tags ? JSON.parse(row.tags) : [];
+        } catch (e) { /* ignore */ }
+
         results.push({
           id: row.id,
           uuid: row.uuid,
           text: row.text,
           category: row.category,
+          tags,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
         });
@@ -230,16 +233,21 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
   async exportAll(): Promise<Note[]> {
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
-    // No limit
-    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, created_at, updated_at FROM notes ORDER BY created_at DESC');
+    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes ORDER BY created_at DESC');
     try {
       while (stmt.step()) {
         const row = stmt.get({}) as any;
+        let tags: string[] = [];
+        try {
+          tags = row.tags ? JSON.parse(row.tags) : [];
+        } catch (e) { /* ignore */ }
+
         results.push({
           id: row.id,
           uuid: row.uuid,
           text: row.text,
           category: row.category,
+          tags,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
         });
@@ -250,23 +258,13 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     return results;
   }
 
-  close() {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
-    }
-  }
-
   async exportDatabase(): Promise<Blob> {
     if (!this.db) throw new Error('Database not initialized');
     try {
-      // Try memory export first (works if DB is in memory or if sqlite3.oo1.OpfsDb supports it via some polyfill/extension, but usually not)
-      // Actually `export()` is a method on the OO1 DB instance in some builds, but for OPFS we might need to read the file.
       try {
         const byteArray = this.db.export();
         return new Blob([byteArray], { type: 'application/x-sqlite3' });
       } catch (innerErr) {
-        // If .export() fails, assume OPFS and try reading the file directly
         const root = await navigator.storage.getDirectory();
         const fileHandle = await root.getFileHandle('notes.db');
         const file = await fileHandle.getFile();
@@ -275,6 +273,13 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     } catch (e) {
       console.error('Failed to export raw DB:', e);
       throw new Error('Current database configuration does not support raw export');
+    }
+  }
+
+  close() {
+    if (this.db) {
+      this.db.close();
+      this.db = null;
     }
   }
 
@@ -294,7 +299,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         await this.save({
           uuid: importedNote.uuid,
           text: importedNote.text,
-          category: importedNote.category
+          category: importedNote.category,
+          tags: importedNote.tags
         }, embedding);
 
         this.db.exec({
@@ -310,7 +316,6 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
           const needsEmbeddingUpdate = existing.text !== importedNote.text;
 
           this.db.transaction(() => {
-            // Also need to handle category_id update if category text changed!
             let categoryId: number | null = null;
             if (importedNote.category) {
               this.db.exec({ sql: 'INSERT OR IGNORE INTO categories(name) VALUES (?)', bind: [importedNote.category] });
@@ -319,8 +324,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
             }
 
             this.db.exec({
-              sql: 'UPDATE notes SET text = ?, category = ?, category_id = ?, updated_at = ? WHERE uuid = ?',
-              bind: [importedNote.text, importedNote.category, categoryId, importedNote.updatedAt, importedNote.uuid]
+              sql: 'UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, updated_at = ? WHERE uuid = ?',
+              bind: [importedNote.text, importedNote.category, categoryId, JSON.stringify(importedNote.tags || []), importedNote.updatedAt, importedNote.uuid]
             });
           });
 
@@ -353,6 +358,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         notes.uuid,
         notes.text, 
         notes.category, 
+        notes.tags,
         notes.created_at,
         notes.updated_at,
         vec_distance_L2(vec_notes.embedding, ?) as distance 
@@ -370,11 +376,15 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       while (stmt.step()) {
         const row = stmt.get({}) as any;
         if (row.distance < 1.0) {
+          let tags: string[] = [];
+          try { tags = row.tags ? JSON.parse(row.tags) : []; } catch (e) { }
+
           results.push({
             id: row.id,
             uuid: row.uuid,
             text: row.text,
             category: row.category,
+            tags,
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at),
             distance: row.distance,

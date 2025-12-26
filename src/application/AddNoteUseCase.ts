@@ -11,24 +11,11 @@ export class AddNoteUseCase {
     this.vectorService = vectorService;
   }
 
-  async execute(text: string, category: string): Promise<Note> {
+  async execute(text: string, category: string, tags: string[] = []): Promise<Note> {
     const embedding = await this.vectorService.generateEmbedding(text);
 
     let finalCategory = category;
-
-    // Automatic LLM Categorization (k-NN via Vector Search)
-    // We cast to any to access 'search' if not available in NoteRepository interface, 
-    // or we should ensure NoteRepository includes Search capability or we inject SearchService separately.
-    // In this composition listNotesUseCase has repo, searchNotesUseCase has repo... 
-    // For now, noteRepository IS SqliteNoteRepository which has search.
-    // But typed as NoteRepository.
-    // Let's assume we can cast or we should inject SearchService.
-
     if (!finalCategory || finalCategory.trim() === '') {
-      // Find top 5 similar notes
-      // Using 'any' cast to bypass strict interface limit if 'search' is not on NoteRepository
-      // Ideally NoteRepository should extend SearchService or we inject it independently.
-      // Given existing pattern:
       const searchService = this.noteRepository as any;
       if (searchService.search) {
         const similarNotes = await searchService.search(text, 5, embedding);
@@ -55,7 +42,7 @@ export class AddNoteUseCase {
       }
     }
 
-    const newNote: NewNote = { text, category: finalCategory, uuid: crypto.randomUUID() };
+    const newNote: NewNote = { text, category: finalCategory, tags, uuid: crypto.randomUUID() };
     return this.noteRepository.save(newNote, embedding);
   }
 }

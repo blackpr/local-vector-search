@@ -11,7 +11,7 @@ import { NoteDetail } from './presentation/components/NoteDetail';
 import { CategoryManager } from './presentation/components/CategoryManager';
 
 function App() {
-    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory } = useWorker();
+    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags } = useWorker();
     const [query, setQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list'>('search');
     const [showSyncModal, setShowSyncModal] = useState(false);
@@ -51,8 +51,8 @@ function App() {
         listNotes(LIMIT, newOffset, filterCategory || undefined);
     };
 
-    const handleAddNote = (text: string, category: string) => {
-        addNote(text, category);
+    const handleAddNote = (text: string, category: string, tags: string[]) => {
+        addNote(text, category, tags);
         setActiveTab('list'); // Switch to list to see it
     };
 
@@ -102,11 +102,12 @@ function App() {
                     setSelectedNote(null);
                     listNotes(LIMIT, 0, filterCategory || undefined);
                 }}
-                onSave={async (id, text, category) => {
-                    updateNote(id, text, category);
+                onSave={async (id, text, category, tags) => {
+                    updateNote(id, text, category, tags);
                     setSelectedNote(null);
                     listNotes(LIMIT, 0, filterCategory || undefined); // Refresh list to show change
                 }}
+                onAutoTags={generateTags}
             />
         );
     }
@@ -256,7 +257,7 @@ function App() {
                     </p>
 
                     <div className="flex flex-col items-center justify-center gap-2 text-xs font-medium mt-4 h-8">
-                        <StatusBadge status={status} progress={progress} />
+                        <StatusBadge status={status} progress={status === 'error' ? error : progress} />
                     </div>
                 </header>
 
@@ -337,7 +338,7 @@ function App() {
                     )}
 
                     {activeTab === 'add' && (
-                        <AddNoteForm onAdd={handleAddNote} categories={categories} isProcessing={isIndexing} onAutoCategory={suggestCategory} />
+                        <AddNoteForm onAdd={handleAddNote} categories={categories} isProcessing={isIndexing} onAutoCategory={suggestCategory} onAutoTags={generateTags} />
                     )}
 
                 </main>

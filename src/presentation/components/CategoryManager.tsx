@@ -52,7 +52,7 @@ export function CategoryManager({ categories, onAdd, onDelete, onClose }: Catego
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {categories.length === 0 ? (
+          {(!categories || categories.length === 0) ? (
             <div className="text-center py-8 text-zinc-500">
               No categories yet.
             </div>

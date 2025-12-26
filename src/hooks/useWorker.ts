@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { WorkerResponse } from '../worker';
+import type { WorkerResponse } from '../app.worker';
 
 export function useWorker() {
   const workerRef = useRef<Worker | null>(null);
@@ -12,7 +12,9 @@ export function useWorker() {
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
 
   useEffect(() => {
-    const worker = new Worker(new URL('../worker.ts', import.meta.url), { type: 'module' });
+    const workerUrl = new URL('../app.worker.ts', import.meta.url);
+    console.log("Initializing Worker from:", workerUrl.toString());
+    const worker = new Worker(workerUrl, { type: 'module' });
     workerRef.current = worker;
     setStatus('loading');
 
@@ -65,9 +67,9 @@ export function useWorker() {
     };
   }, []);
 
-  const addNote = useCallback((text: string, category: string) => {
+  const addNote = useCallback((text: string, category: string, tags: string[]) => {
     setIsIndexing(true);
-    workerRef.current?.postMessage({ type: 'ADD_NOTE', payload: { text, category } });
+    workerRef.current?.postMessage({ type: 'ADD_NOTE', payload: { text, category, tags } });
   }, []);
 
   const search = useCallback((query: string) => {
@@ -100,8 +102,8 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'DELETE_NOTE', payload: id });
   }, []);
 
-  const updateNote = useCallback((id: number, text: string, category: string) => {
-    workerRef.current?.postMessage({ type: 'UPDATE_NOTE', payload: { id, text, category } });
+  const updateNote = useCallback((id: number, text: string, category: string, tags: string[] = []) => {
+    workerRef.current?.postMessage({ type: 'UPDATE_NOTE', payload: { id, text, category, tags } });
   }, []);
 
   const listCategories = useCallback(() => {
@@ -191,5 +193,19 @@ export function useWorker() {
     });
   }, []);
 
-  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory };
+  const generateTags = useCallback((text: string) => {
+    return new Promise<string[]>((resolve) => {
+      if (!workerRef.current) return resolve([]);
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'TAGS_GENERATED') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve(e.data.result);
+        }
+      };
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'GENERATE_TAGS', payload: text });
+    });
+  }, []);
+
+  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags };
 }

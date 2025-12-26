@@ -3,6 +3,7 @@ export interface Note {
   uuid: string;
   text: string;
   category: string;
+  tags?: string[];
   createdAt: Date;
   updatedAt: Date;
 }

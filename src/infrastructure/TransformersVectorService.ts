@@ -16,7 +16,7 @@ export class TransformersVectorService implements VectorService {
 
     // @ts-ignore - types can be complex
     this.classifier = await pipeline('feature-extraction', MODEL_ID, {
-      device: 'webgpu', // Uses WebGPU if available, falls back to WASM
+      device: 'auto', // Uses WebGPU if available, falls back to WASM/others
       dtype: 'fp32',    // SQLite expects float32
       progress_callback: (data: any) => {
         if (this.onProgress) {

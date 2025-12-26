@@ -29,7 +29,7 @@ export function StatusBadge({ status, progress }: StatusBadgeProps) {
     return <span className="flex items-center gap-1.5 text-emerald-400"><div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> System Ready</span>;
   }
   if (status === 'error') {
-    return <span className="flex items-center gap-1.5 text-red-400"><div className="w-2 h-2 rounded-full bg-red-400" /> System Error</span>;
+    return <span className="flex items-center gap-1.5 text-red-400" title={typeof progress === 'string' ? progress : 'Unknown Error'}><div className="w-2 h-2 rounded-full bg-red-400" /> {typeof progress === 'string' ? progress.slice(0, 30) + '...' : 'System Error'}</span>;
   }
   return <span className="text-zinc-600">Waiting...</span>;
 }

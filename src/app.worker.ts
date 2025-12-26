@@ -6,13 +6,14 @@ import { SearchNotesUseCase } from './application/SearchNotesUseCase';
 import { DatabaseFactory } from './infrastructure/DatabaseFactories';
 import { SqliteNoteRepository } from './infrastructure/SqliteNoteRepository';
 import { TransformersVectorService } from './infrastructure/TransformersVectorService';
+import { TaggingService } from './infrastructure/TaggingService';
 
 // Define types for messages (Keep consistent with frontend)
 export type WorkerMessage =
   | { type: 'INIT' }
-  | { type: 'ADD_NOTE'; payload: { text: string; category: string } }
+  | { type: 'ADD_NOTE'; payload: { text: string; category: string; tags: string[] } }
   | { type: 'SEARCH'; payload: string }
-  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number } }
+  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string } }
   | { type: 'DELETE_NOTE'; payload: number }
   | { type: 'UPDATE_NOTE'; payload: any }
   | { type: 'LIST_CATEGORIES' }
@@ -22,6 +23,7 @@ export type WorkerMessage =
   | { type: 'EXPORT_DB' }
   | { type: 'IMPORT_DB'; payload: File }
   | { type: 'SUGGEST_CATEGORY'; payload: string }
+  | { type: 'GENERATE_TAGS'; payload: string }
   | { type: 'IMPORT'; payload: any };
 
 export type WorkerResponse =
@@ -39,6 +41,7 @@ export type WorkerResponse =
   | { type: 'IMPORT_RESULT'; payload: { imported: number; updated: number } }
   | { type: 'IMPORT_DB_RESULT' }
   | { type: 'CATEGORY_SUGGESTED'; result: string | null }
+  | { type: 'TAGS_GENERATED'; result: string[] }
   | { type: 'ERROR'; error: string }
   | { type: 'PROGRESS'; payload: any };
 
@@ -50,20 +53,32 @@ let deleteNoteUseCase: DeleteNoteUseCase;
 let manageCategoriesUseCase: ManageCategoriesUseCase;
 let noteRepository: SqliteNoteRepository;
 let vectorService: TransformersVectorService;
+let taggingService: TaggingService;
 
 async function initialize() {
   try {
+    console.log("Worker: Initializing...");
+
     // 1. Initialize Infrastructure
     vectorService = new TransformersVectorService((data) => {
       self.postMessage({ type: 'PROGRESS', payload: data });
     });
-    // Start model loading immediately
-    const modelInitPromise = vectorService.initialize();
 
-    const db = await DatabaseFactory.createDatabase();
+    // Start model loading immediately
+    console.log("Worker: Loading Vector Model...");
+    const modelInitPromise = vectorService.initialize().catch(err => {
+      throw new Error(`Model Load Failed: ${err.message}`);
+    });
+
+    console.log("Worker: Opening DB...");
+    const db = await DatabaseFactory.createDatabase().catch(err => {
+      throw new Error(`DB Failed: ${err.message}`);
+    });
     noteRepository = new SqliteNoteRepository(db);
 
+    console.log("Worker: Waiting for Model...");
     await modelInitPromise;
+    console.log("Worker: Model Loaded.");
 
     // 2. Initialize Application Layer
     addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService);
@@ -89,7 +104,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     } else if (type === 'ADD_NOTE') {
       if (!addNoteUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
-      await addNoteUseCase.execute(payload.text, payload.category);
+      await addNoteUseCase.execute(payload.text, payload.category, payload.tags);
       self.postMessage({ type: 'NOTE_ADDED', text: payload.text });
     } else if (type === 'SEARCH') {
       if (!searchNotesUseCase) throw new Error('Not initialized');
@@ -121,6 +136,22 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       const topCategory = Object.keys(categoryCounts).sort((a, b) => categoryCounts[b] - categoryCounts[a])[0];
 
       self.postMessage({ type: 'CATEGORY_SUGGESTED', result: topCategory || null });
+    } else if (type === 'GENERATE_TAGS') {
+      try {
+        if (!taggingService) {
+          console.log("Worker: Lazy Initializing Tagging Service...");
+          taggingService = new TaggingService();
+          await taggingService.initialize();
+        }
+        const payload = (e.data as any).payload;
+        console.log("Worker: Generating tags for", payload);
+        const tags = await taggingService.generateTags(payload);
+        self.postMessage({ type: 'TAGS_GENERATED', result: tags });
+      } catch (err) {
+        console.error("Worker: Tag Gen Error", err);
+        self.postMessage({ type: 'TAGS_GENERATED', result: [] });
+        self.postMessage({ type: 'ERROR', error: `Tagging Failed: ${(err as Error).message}` });
+      }
     } else if (type === 'DELETE_NOTE') {
       if (!deleteNoteUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
