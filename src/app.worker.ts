@@ -44,13 +44,58 @@ async function initialize() {
   try {
     console.log("Worker: Initializing...");
 
+    // Track progress for both models
+    const modelProgress = {
+      vectorLoaded: 0,
+      vectorTotal: 300 * 1024 * 1024, // ~300MB estimated for Gemma model
+      taggingLoaded: 0,
+      taggingTotal: 80 * 1024 * 1024, // ~80MB estimated for LaMini model
+      maxCombined: 0  // Track max to prevent going backwards
+    };
+
+    const sendCombinedProgress = () => {
+      // Calculate progress based on bytes loaded vs total
+      const vectorProgress = Math.min(100, (modelProgress.vectorLoaded / modelProgress.vectorTotal) * 100);
+      const taggingProgress = Math.min(100, (modelProgress.taggingLoaded / modelProgress.taggingTotal) * 100);
+      const combinedProgress = (vectorProgress + taggingProgress) / 2;
+
+      // Only send if progress increased (never go backwards)
+      if (combinedProgress > modelProgress.maxCombined) {
+        modelProgress.maxCombined = combinedProgress;
+        self.postMessage({
+          type: 'PROGRESS',
+          payload: {
+            status: 'progress',
+            file: 'models',
+            progress: combinedProgress,
+            loaded: combinedProgress,
+            total: 100
+          }
+        } as WorkerResponse);
+      }
+    };
+
     // 1. Initialize Infrastructure
     vectorService = new TransformersVectorService((data) => {
-      self.postMessage({ type: 'PROGRESS', payload: data } as WorkerResponse);
+      if (data.status === 'progress' && data.loaded) {
+        modelProgress.vectorLoaded = data.loaded;
+        // Update total if we get it from the response
+        if (data.total) {
+          modelProgress.vectorTotal = Math.max(modelProgress.vectorTotal, data.total);
+        }
+        sendCombinedProgress();
+      }
     });
 
     taggingService = new TaggingService((data) => {
-      self.postMessage({ type: 'PROGRESS', payload: data } as WorkerResponse);
+      if (data.status === 'progress' && data.loaded) {
+        modelProgress.taggingLoaded = data.loaded;
+        // Update total if we get it from the response
+        if (data.total) {
+          modelProgress.taggingTotal = Math.max(modelProgress.taggingTotal, data.total);
+        }
+        sendCombinedProgress();
+      }
     });
 
     // Start model loading immediately (in parallel)
