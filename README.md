@@ -1,4 +1,6 @@
-# Second Brain: Local Vector Search Engine
+# Latent
+
+**Explore the space between your thoughts, entirely offline.**
 
 A privacy-first, offline-capable semantic search engine running entirely in your browser. Built with **React**, **SQLite WASM**, and **Transformers.js**.
 
