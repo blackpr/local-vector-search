@@ -7,6 +7,11 @@ const MODEL_ID = 'Xenova/LaMini-Flan-T5-77M';
 export class TaggingService implements TaggingSystem {
   private generator: TextGenerationPipeline | null = null;
   private trace: string[] = [];
+  private onProgress?: (data: any) => void;
+
+  constructor(onProgress?: (data: any) => void) {
+    this.onProgress = onProgress;
+  }
 
   private log(msg: string) {
     this.trace.push(msg);
@@ -20,6 +25,11 @@ export class TaggingService implements TaggingSystem {
       this.generator = await pipeline('text2text-generation', MODEL_ID, {
         device: 'auto',
         dtype: 'fp32',
+        progress_callback: (data: any) => {
+          if (this.onProgress) {
+            this.onProgress(data);
+          }
+        },
       });
       this.log('InitDone');
     } catch (e) {

@@ -49,10 +49,18 @@ async function initialize() {
       self.postMessage({ type: 'PROGRESS', payload: data } as WorkerResponse);
     });
 
-    // Start model loading immediately
-    console.log("Worker: Loading Vector Model...");
+    taggingService = new TaggingService((data) => {
+      self.postMessage({ type: 'PROGRESS', payload: data } as WorkerResponse);
+    });
+
+    // Start model loading immediately (in parallel)
+    console.log("Worker: Loading Vector Model and Tagging Model...");
     const modelInitPromise = vectorService.initialize().catch(err => {
-      throw new Error(`Model Load Failed: ${err.message}`);
+      throw new Error(`Vector Model Load Failed: ${err.message}`);
+    });
+
+    const taggingInitPromise = taggingService.initialize().catch(err => {
+      throw new Error(`Tagging Model Load Failed: ${err.message}`);
     });
 
     console.log("Worker: Opening DB...");
@@ -61,12 +69,10 @@ async function initialize() {
     });
     noteRepository = new SqliteNoteRepository(db);
 
-    console.log("Worker: Waiting for Model...");
-    await modelInitPromise;
-    console.log("Worker: Model Loaded.");
+    console.log("Worker: Waiting for Models...");
+    await Promise.all([modelInitPromise, taggingInitPromise]);
+    console.log("Worker: Models Loaded.");
 
-    // Tagging Service (Lazy init handled inside service or here)
-    taggingService = new TaggingService();
     // databaseManager needs access to current noteRepository for export/closing
     databaseManager = new SqliteDatabaseManager(() => noteRepository);
 
