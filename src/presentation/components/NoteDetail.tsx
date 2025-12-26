@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ArrowLeft, Trash2, Tag, Edit2, Eye, X, Loader2 } from 'lucide-react';
+import { ConfirmationModal } from './ConfirmationModal';
+
 
 interface NoteDetailProps {
   note: {
@@ -21,6 +23,7 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
   const [text, setText] = useState(note.text);
   const [tags, setTags] = useState<string[]>(note.tags || []);
   const [isProcessingTags, setIsProcessingTags] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   // Sync state if note prop updates
   useEffect(() => {
@@ -77,7 +80,7 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
             {isEditing ? <><Eye className="w-4 h-4" /> Preview</> : <><Edit2 className="w-4 h-4" /> Edit</>}
           </button>
           <button
-            onClick={() => { onDelete(note.id); onBack(); }}
+            onClick={() => setShowDeleteModal(true)}
             className="p-2 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
             title="Delete Note"
           >
@@ -155,6 +158,19 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
           </button>
         </div>
       )}
+
+      <ConfirmationModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={() => {
+          onDelete(note.id);
+          onBack();
+        }}
+        title="Delete Note"
+        message="Are you sure you want to delete this note? This action cannot be undone."
+        confirmLabel="Delete"
+        isDestructive={true}
+      />
     </div>
   );
 }

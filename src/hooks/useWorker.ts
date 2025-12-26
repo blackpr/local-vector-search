@@ -45,6 +45,8 @@ export function useWorker() {
       } else if (type === 'NOTE_DELETED') {
         const id = (e.data as any).id;
         setAllNotes(prev => prev.filter(note => note.id !== id));
+        setSearchResults(prev => prev.filter(note => note.id !== id));
+
       } else if (type === 'ERROR') {
         setStatus('error');
         setError((e.data as any).error);
