@@ -3,6 +3,7 @@ import { DeleteNoteUseCase } from './application/DeleteNoteUseCase';
 import { ListNotesUseCase } from './application/ListNotesUseCase';
 import { ManageCategoriesUseCase } from './application/ManageCategoriesUseCase';
 import { SearchNotesUseCase } from './application/SearchNotesUseCase';
+import { GetNoteUseCase } from './application/GetNoteUseCase';
 import { DatabaseFactory } from './infrastructure/DatabaseFactories';
 import { SqliteNoteRepository } from './infrastructure/SqliteNoteRepository';
 import { TransformersVectorService } from './infrastructure/TransformersVectorService';
@@ -24,7 +25,8 @@ export type WorkerMessage =
   | { type: 'IMPORT_DB'; payload: File }
   | { type: 'SUGGEST_CATEGORY'; payload: string }
   | { type: 'GENERATE_TAGS'; payload: string }
-  | { type: 'IMPORT'; payload: any };
+  | { type: 'IMPORT'; payload: any }
+  | { type: 'GET_NOTE'; payload: number };
 
 export type WorkerResponse =
   | { type: 'READY' }
@@ -43,6 +45,7 @@ export type WorkerResponse =
   | { type: 'CATEGORY_SUGGESTED'; result: string | null }
   | { type: 'TAGS_GENERATED'; result: string[] }
   | { type: 'ERROR'; error: string }
+  | { type: 'NOTE_FOUND'; result: any }
   | { type: 'PROGRESS'; payload: any };
 
 // Global dependency instances
@@ -51,6 +54,7 @@ let searchNotesUseCase: SearchNotesUseCase;
 let listNotesUseCase: ListNotesUseCase;
 let deleteNoteUseCase: DeleteNoteUseCase;
 let manageCategoriesUseCase: ManageCategoriesUseCase;
+let getNoteUseCase: GetNoteUseCase;
 let noteRepository: SqliteNoteRepository;
 let vectorService: TransformersVectorService;
 let taggingService: TaggingService;
@@ -86,6 +90,7 @@ async function initialize() {
     listNotesUseCase = new ListNotesUseCase(noteRepository);
     deleteNoteUseCase = new DeleteNoteUseCase(noteRepository);
     manageCategoriesUseCase = new ManageCategoriesUseCase(noteRepository);
+    getNoteUseCase = new GetNoteUseCase(noteRepository);
 
     console.log('System Ready.');
     self.postMessage({ type: 'READY' });
@@ -225,6 +230,17 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       } catch (err) {
         console.error("OPFS Import Error", err);
         self.postMessage({ type: 'ERROR', error: "Failed to overwrite database file. " + err });
+      }
+    } else if (type === 'GET_NOTE') {
+      if (!getNoteUseCase) throw new Error('Not initialized');
+      const id = (e.data as any).payload;
+      const result = await getNoteUseCase.execute(id);
+      if (result) {
+        // Map keys for frontend compatibility
+        const mapped = { ...result, created_at: result.createdAt };
+        self.postMessage({ type: 'NOTE_FOUND', result: mapped });
+      } else {
+        self.postMessage({ type: 'NOTE_FOUND', result: null });
       }
     }
   } catch (error) {

@@ -11,10 +11,11 @@ import { NoteDetail } from './presentation/components/NoteDetail';
 import { CategoryManager } from './presentation/components/CategoryManager';
 
 function App() {
-    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags } = useWorker();
+    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
     const [query, setQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list'>('search');
     const [showSyncModal, setShowSyncModal] = useState(false);
+    const [isUrlInitialized, setIsUrlInitialized] = useState(false);
 
     // Routing State
     const [selectedNote, setSelectedNote] = useState<any | null>(null);
@@ -27,15 +28,17 @@ function App() {
 
     // Debounce search
     useEffect(() => {
+        if (!isUrlInitialized) return;
         const timer = setTimeout(() => {
             search(query);
         }, 300);
         return () => clearTimeout(timer);
-    }, [query, search]);
+    }, [query, search, isUrlInitialized]);
 
     // Initial Load & Tab Change
     useEffect(() => {
-        setQuery('');
+        if (!isUrlInitialized) return;
+
         if (activeTab === 'list' && !isIndexing) {
             // Reset pagination
             setOffset(0);
@@ -43,7 +46,54 @@ function App() {
         }
         // Load categories on start
         listCategories();
-    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory]);
+    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, isUrlInitialized]);
+
+    // URL Sync Initialization
+    useEffect(() => {
+        if (status === 'ready' && !isUrlInitialized) {
+            const params = new URLSearchParams(window.location.search);
+            const tab = params.get('tab');
+            const q = params.get('q');
+            const noteId = params.get('noteId');
+            const cat = params.get('cat');
+
+            if (tab && ['search', 'add', 'list'].includes(tab)) {
+                setActiveTab(tab as any);
+            }
+            if (q) {
+                setQuery(q);
+                search(q); // Trigger immediate search
+            }
+            if (cat) {
+                setFilterCategory(cat);
+            }
+
+            if (noteId) {
+                getNote(parseInt(noteId)).then(note => {
+                    if (note) setSelectedNote(note);
+                });
+            }
+
+            setIsUrlInitialized(true);
+        }
+    }, [status, isUrlInitialized, getNote, search]);
+
+    // Update URL on state change
+    useEffect(() => {
+        if (!isUrlInitialized) return;
+
+        const params = new URLSearchParams();
+        if (activeTab !== 'search') params.set('tab', activeTab);
+        if (query) params.set('q', query);
+        if (filterCategory) params.set('cat', filterCategory);
+        if (selectedNote) params.set('noteId', selectedNote.id.toString());
+
+        const stringified = params.toString();
+        const newUrl = stringified ? `?${stringified}` : window.location.pathname;
+
+        // Use replaceState to update URL without adding to history (for now)
+        window.history.replaceState(null, '', newUrl);
+    }, [activeTab, query, selectedNote, filterCategory, isUrlInitialized]);
 
     const handleLoadMore = () => {
         const newOffset = offset + LIMIT;

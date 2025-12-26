@@ -8,4 +8,5 @@ export interface NoteRepository {
   exportAll(): Promise<Note[]>;
   merge(importedNotes: Note[], embeddingService: { generateEmbedding: (text: string) => Promise<Float32Array> }): Promise<{ imported: number; updated: number }>;
   exportDatabase?(): Promise<Blob>;
+  findById(id: number): Promise<Note | null>;
 }

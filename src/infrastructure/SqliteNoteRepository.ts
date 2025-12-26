@@ -116,6 +116,31 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     });
   }
 
+  async findById(id: number): Promise<Note | null> {
+    if (!this.db) throw new Error('Database not initialized');
+    const row = this.db.selectObject(
+      'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes WHERE rowid = ?',
+      [id]
+    ) as any;
+
+    if (!row) return null;
+
+    let tags: string[] = [];
+    try {
+      tags = row.tags ? JSON.parse(row.tags) : [];
+    } catch (e) { /* ignore */ }
+
+    return {
+      id: row.id,
+      uuid: row.uuid,
+      text: row.text,
+      category: row.category,
+      tags,
+      createdAt: new Date(row.created_at),
+      updatedAt: new Date(row.updated_at),
+    };
+  }
+
   // --- NoteRepository Implementation ---
 
   private toSqliteBlob(vector: any): Uint8Array {

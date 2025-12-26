@@ -207,5 +207,19 @@ export function useWorker() {
     });
   }, []);
 
-  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags };
+  const getNote = useCallback((id: number) => {
+    return new Promise<{ id: number; text: string; category: string; created_at: string; tags: string[] } | null>((resolve) => {
+      if (!workerRef.current) return resolve(null);
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'NOTE_FOUND') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve(e.data.result as any);
+        }
+      };
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'GET_NOTE', payload: id });
+    });
+  }, []);
+
+  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
 }
