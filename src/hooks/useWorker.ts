@@ -5,7 +5,7 @@ export function useWorker() {
   const workerRef = useRef<Worker | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<Array<{ text: string; category: string; distance: number }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: number; text: string; category: string; created_at: string | Date; tags?: string[]; distance: number }>>([]);
   const [allNotes, setAllNotes] = useState<Array<{ id: number; text: string; category: string; created_at: string }>>([]);
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [isIndexing, setIsIndexing] = useState(false);

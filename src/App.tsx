@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useWorker } from './hooks/useWorker';
-import { Search, Plus, Brain, List, RefreshCw, Folder } from 'lucide-react';
+import { Search, Plus, Brain, List, RefreshCw, Folder, Sparkles } from 'lucide-react';
 import clsx from 'clsx';
 import { NoteList } from './presentation/components/NoteList';
 import { AddNoteForm } from './presentation/components/AddNoteForm';
@@ -210,8 +210,31 @@ function App() {
                     query={query}
                     setQuery={setQuery}
                     isIndexing={isIndexing}
-                    results={searchResults}
                 />
+
+                {searchResults.length > 0 ? (
+                    <div className="pt-2 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                        <NoteList
+                            notes={searchResults}
+                            onDelete={deleteNote}
+                            onNoteClick={setSelectedNote}
+                            onCategoryClick={(cat) => {
+                                setFilterCategory(cat);
+                                setActiveTab('list');
+                            }}
+                        />
+                    </div>
+                ) : query.length > 1 ? (
+                    <div className="text-center py-12 text-zinc-600">
+                        <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        <p>No matching thoughts found.</p>
+                    </div>
+                ) : (
+                    <div className="text-center py-12 text-zinc-600">
+                        <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                        <p>Type to explore your memory.</p>
+                    </div>
+                )}
             </div>
         )
     }
@@ -357,8 +380,30 @@ function App() {
                                 query={query}
                                 setQuery={setQuery}
                                 isIndexing={isIndexing}
-                                results={searchResults}
                             />
+                            {searchResults.length > 0 ? (
+                                <div className="pt-2 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                                    <NoteList
+                                        notes={searchResults}
+                                        onDelete={deleteNote}
+                                        onNoteClick={setSelectedNote}
+                                        onCategoryClick={(cat) => {
+                                            setFilterCategory(cat);
+                                            setActiveTab('list');
+                                        }}
+                                    />
+                                </div>
+                            ) : query.length > 1 ? (
+                                <div className="text-center py-12 text-zinc-600">
+                                    <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                    <p>No matching thoughts found.</p>
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-zinc-600">
+                                    <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                                    <p>Type to explore your memory.</p>
+                                </div>
+                            )}
                         </div>
                     )}
 

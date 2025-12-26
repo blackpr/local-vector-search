@@ -115,7 +115,11 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       if (!searchNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
       const results = await searchNotesUseCase.execute(payload);
-      self.postMessage({ type: 'SEARCH_RESULTS', results: results as any });
+      const mappedResults = results.map(r => ({
+        ...r,
+        created_at: r.createdAt
+      }));
+      self.postMessage({ type: 'SEARCH_RESULTS', results: mappedResults as any });
     } else if (type === 'LIST_NOTES') {
       if (!listNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload || {};

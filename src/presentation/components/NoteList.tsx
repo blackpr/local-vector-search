@@ -10,7 +10,7 @@ function truncate(str: string, length: number) {
 }
 
 interface NoteListProps {
-  notes: Array<{ id: number; text: string; category: string; tags?: string[]; created_at: string }>;
+  notes: Array<{ id: number; text: string; category: string; tags?: string[]; created_at: string | Date; distance?: number }>;
   onDelete: (id: number) => void;
   onNoteClick: (note: any) => void;
   onCategoryClick?: (category: string) => void;
@@ -64,6 +64,12 @@ export function NoteList({ notes, onDelete, onNoteClick, onCategoryClick, onLoad
                     {tag}
                   </span>
                 ))}
+
+                {note.distance !== undefined && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] uppercase tracking-wider font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 ml-2">
+                    {((1 - note.distance) * 100).toFixed(0)}% Match
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-3 ml-2 shrink-0">
