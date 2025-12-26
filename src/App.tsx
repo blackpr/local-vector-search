@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useWorker } from './hooks/useWorker';
-import { Search, Plus, Brain, List } from 'lucide-react';
+import { Search, Plus, Brain, List, RefreshCw } from 'lucide-react';
 import clsx from 'clsx';
 import { NoteList } from './presentation/components/NoteList';
 import { AddNoteForm } from './presentation/components/AddNoteForm';
 import { SearchBar } from './presentation/components/SearchBar';
 import { StatusBadge } from './presentation/components/StatusBadge';
+import { SyncModal } from './presentation/components/SyncModal';
 
 function App() {
-    const { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress } = useWorker();
+    const { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress, exportNotes, importNotes } = useWorker();
     const [query, setQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list'>('search');
+    const [showSyncModal, setShowSyncModal] = useState(false);
 
     // Debounce search
     useEffect(() => {
@@ -32,17 +34,59 @@ function App() {
         addNote(text, category);
     };
 
+    const handleExport = async () => {
+        return await exportNotes();
+    };
+
+    const handleImport = async (file: File) => {
+        return new Promise<{ imported: number; updated: number }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const content = e.target?.result as string;
+                    const importedNotes = JSON.parse(content);
+                    if (!Array.isArray(importedNotes)) throw new Error('Invalid backup file format');
+
+                    const result = await importNotes(importedNotes);
+                    resolve(result);
+                } catch (err) {
+                    reject(err);
+                }
+            };
+            reader.onerror = () => reject(reader.error);
+            reader.readAsText(file);
+        });
+    };
+
     return (
         <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30">
             <div className="max-w-2xl mx-auto p-4 md:p-8 flex flex-col min-h-screen">
 
                 {/* Header */}
-                <header className="mb-8 text-center space-y-2">
+                <header className="mb-8 text-center space-y-2 relative">
+                    <div className="absolute right-0 top-0 hidden md:block">
+                        <button
+                            onClick={() => setShowSyncModal(true)}
+                            className="p-2 text-zinc-500 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors"
+                            title="Sync Notes"
+                        >
+                            <RefreshCw className="w-5 h-5" />
+                        </button>
+                    </div>
+
                     <div className="inline-flex items-center justify-center p-3 bg-zinc-900 rounded-2xl ring-1 ring-zinc-800 shadow-lg shadow-indigo-500/10 mb-4">
                         <Brain className="w-8 h-8 text-indigo-400" />
                     </div>
-                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent">
+
+                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent flex items-center justify-center gap-4">
                         Second Brain
+                        <button
+                            onClick={() => setShowSyncModal(true)}
+                            className="md:hidden p-1 text-zinc-500 hover:text-indigo-400"
+                            title="Sync Notes"
+                        >
+                            <RefreshCw className="w-5 h-5" />
+                        </button>
                     </h1>
                     <p className="text-zinc-500">
                         Offline Semantic Search Engine
@@ -115,6 +159,14 @@ function App() {
 
                 </main>
             </div>
+
+            {showSyncModal && (
+                <SyncModal
+                    onClose={() => setShowSyncModal(false)}
+                    onExport={handleExport}
+                    onImport={handleImport}
+                />
+            )}
         </div>
     );
 }

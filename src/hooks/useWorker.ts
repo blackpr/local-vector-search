@@ -23,7 +23,6 @@ export function useWorker() {
         setProgress(null);
       } else if (type === 'NOTE_ADDED') {
         setIsIndexing(false);
-        // Refresh list if needed
         worker.postMessage({ type: 'LIST_NOTES' });
       } else if (type === 'SEARCH_RESULTS') {
         setSearchResults((e.data as any).results);
@@ -39,11 +38,10 @@ export function useWorker() {
         setProgress(null);
       } else if (type === 'PROGRESS') {
         const payload = (e.data as any).payload;
-        // Transformers.js progress format
         if (payload.status === 'progress') {
           setProgress({
             file: payload.file,
-            progress: payload.progress, // 0-100
+            progress: payload.progress,
             loaded: payload.loaded,
             total: payload.total
           });
@@ -79,5 +77,44 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'DELETE_NOTE', payload: id });
   }, []);
 
-  return { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress };
+  // Sync methods (Promise-based wrappers)
+  const exportNotes = useCallback(() => {
+    return new Promise<any[]>((resolve, reject) => {
+      if (!workerRef.current) return reject('Worker not ready');
+
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'EXPORT_RESULT') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve((e.data as any).payload);
+        } else if (e.data.type === 'ERROR') {
+          workerRef.current?.removeEventListener('message', handler);
+          reject(e.data.error);
+        }
+      };
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'EXPORT' });
+    });
+  }, []);
+
+  const importNotes = useCallback((notes: any[]) => {
+    return new Promise<{ imported: number; updated: number }>((resolve, reject) => {
+      if (!workerRef.current) return reject('Worker not ready');
+      setIsIndexing(true); // Importing involves embedding
+
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'IMPORT_RESULT') {
+          workerRef.current?.removeEventListener('message', handler);
+          resolve((e.data as any).payload);
+        } else if (e.data.type === 'ERROR') {
+          workerRef.current?.removeEventListener('message', handler);
+          reject(e.data.error);
+        }
+      };
+      workerRef.current.addEventListener('message', handler);
+      workerRef.current.postMessage({ type: 'IMPORT', payload: notes });
+    });
+  }, []);
+
+  return { status, error, searchResults, allNotes, addNote, search, listNotes, deleteNote, isIndexing, progress, exportNotes, importNotes };
+
 }
