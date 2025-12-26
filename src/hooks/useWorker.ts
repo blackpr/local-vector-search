@@ -80,8 +80,8 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'SEARCH', payload: query });
   }, []);
 
-  const listNotes = useCallback((limit: number = 20, offset: number = 0, category?: string) => {
-    workerRef.current?.postMessage({ type: 'LIST_NOTES', payload: { limit, offset, category } });
+  const listNotes = useCallback((limit: number = 20, offset: number = 0, category?: string, tag?: string) => {
+    workerRef.current?.postMessage({ type: 'LIST_NOTES', payload: { limit, offset, category, tag } });
   }, []);
 
   const suggestCategory = useCallback((text: string) => {

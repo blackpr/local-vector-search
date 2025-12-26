@@ -21,6 +21,7 @@ function App() {
     const [selectedNote, setSelectedNote] = useState<any | null>(null);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
     const [filterCategory, setFilterCategory] = useState<string | null>(null);
+    const [filterTag, setFilterTag] = useState<string | null>(null);
 
     // Pagination State
     const [offset, setOffset] = useState(0);
@@ -42,11 +43,11 @@ function App() {
         if (activeTab === 'list' && !isIndexing) {
             // Reset pagination
             setOffset(0);
-            listNotes(LIMIT, 0, filterCategory || undefined);
+            listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
         }
         // Load categories on start
         listCategories();
-    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, isUrlInitialized]);
+    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, filterTag, isUrlInitialized]);
 
     // URL Sync Initialization
     useEffect(() => {
@@ -56,6 +57,7 @@ function App() {
             const q = params.get('q');
             const noteId = params.get('noteId');
             const cat = params.get('cat');
+            const tag = params.get('tag');
 
             if (tab && ['search', 'add', 'list'].includes(tab)) {
                 setActiveTab(tab as any);
@@ -66,6 +68,9 @@ function App() {
             }
             if (cat) {
                 setFilterCategory(cat);
+            }
+            if (tag) {
+                setFilterTag(tag);
             }
 
             if (noteId) {
@@ -86,6 +91,7 @@ function App() {
         if (activeTab !== 'search') params.set('tab', activeTab);
         if (query) params.set('q', query);
         if (filterCategory) params.set('cat', filterCategory);
+        if (filterTag) params.set('tag', filterTag);
         if (selectedNote) params.set('noteId', selectedNote.id.toString());
 
         const stringified = params.toString();
@@ -93,12 +99,12 @@ function App() {
 
         // Use replaceState to update URL without adding to history (for now)
         window.history.replaceState(null, '', newUrl);
-    }, [activeTab, query, selectedNote, filterCategory, isUrlInitialized]);
+    }, [activeTab, query, selectedNote, filterCategory, filterTag, isUrlInitialized]);
 
     const handleLoadMore = () => {
         const newOffset = offset + LIMIT;
         setOffset(newOffset);
-        listNotes(LIMIT, newOffset, filterCategory || undefined);
+        listNotes(LIMIT, newOffset, filterCategory || undefined, filterTag || undefined);
     };
 
     const handleAddNote = (text: string, category: string, tags: string[]) => {
@@ -108,6 +114,13 @@ function App() {
 
     const handleCategoryClick = (category: string) => {
         setFilterCategory(category === filterCategory ? null : category);
+        setFilterTag(null); // Clear tag when correcting category
+        setActiveTab('list');
+    };
+
+    const handleTagClick = (tag: string) => {
+        setFilterTag(tag === filterTag ? null : tag);
+        setFilterCategory(null); // Clear category when selecting tag to avoid intersection for now
         setActiveTab('list');
     };
 
@@ -145,17 +158,17 @@ function App() {
                 onBack={() => {
                     setSelectedNote(null);
                     // Refresh in case of edits/deletes
-                    listNotes(LIMIT, 0, filterCategory || undefined);
+                    listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
                 }}
                 onDelete={(id) => {
                     deleteNote(id);
                     setSelectedNote(null);
-                    listNotes(LIMIT, 0, filterCategory || undefined);
+                    listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
                 }}
                 onSave={async (id, text, category, tags) => {
                     updateNote(id, text, category, tags);
                     setSelectedNote(null);
-                    listNotes(LIMIT, 0, filterCategory || undefined); // Refresh list to show change
+                    listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined); // Refresh list to show change
                 }}
                 onAutoTags={generateTags}
             />
@@ -220,6 +233,12 @@ function App() {
                             onNoteClick={setSelectedNote}
                             onCategoryClick={(cat) => {
                                 setFilterCategory(cat);
+                                setFilterTag(null);
+                                setActiveTab('list');
+                            }}
+                            onTagClick={(tag) => {
+                                setFilterTag(tag);
+                                setFilterCategory(null);
                                 setActiveTab('list');
                             }}
                         />
@@ -250,13 +269,19 @@ function App() {
                                 <span className="text-indigo-400">{filterCategory}</span>
                                 <button onClick={() => setFilterCategory(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
                             </>
+                        ) : filterTag ? (
+                            <>
+                                <span className="text-zinc-400">Tag:</span>
+                                <span className="text-indigo-400">#{filterTag}</span>
+                                <button onClick={() => setFilterTag(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
+                            </>
                         ) : (
                             offset > 0 ? `Notes (Page ${offset / LIMIT + 1})` : 'All Notes'
                         )}
                     </h2>
                     {offset > 0 && (
                         <button
-                            onClick={() => { setOffset(0); listNotes(LIMIT, 0, filterCategory || undefined); }}
+                            onClick={() => { setOffset(0); listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined); }}
                             className="text-xs text-indigo-400 hover:text-indigo-300"
                         >
                             Back to Start
@@ -268,6 +293,7 @@ function App() {
                     onDelete={deleteNote}
                     onNoteClick={setSelectedNote}
                     onCategoryClick={handleCategoryClick}
+                    onTagClick={handleTagClick}
                     onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
                     hasMore={allNotes.length === LIMIT}
                 />
@@ -304,21 +330,46 @@ function App() {
                         </button>
                     </div>
 
-                    <div className="inline-flex items-center justify-center p-3 bg-zinc-900 rounded-2xl ring-1 ring-zinc-800 shadow-lg shadow-indigo-500/10 mb-4">
+                    <div
+                        onClick={() => {
+                            setActiveTab('search');
+                            setQuery('');
+                            setFilterCategory(null);
+                            setFilterTag(null);
+                            setSelectedNote(null);
+                        }}
+                        className="cursor-pointer inline-flex items-center justify-center p-3 bg-zinc-900 rounded-2xl ring-1 ring-zinc-800 shadow-lg shadow-indigo-500/10 mb-4 hover:ring-indigo-500/50 transition-all hover:scale-105 active:scale-95"
+                    >
                         <Brain className="w-8 h-8 text-indigo-400" />
                     </div>
 
-                    <h1 className="text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent flex items-center justify-center gap-4">
+                    <h1
+                        onClick={() => {
+                            setActiveTab('search');
+                            setQuery('');
+                            setFilterCategory(null);
+                            setFilterTag(null);
+                            setSelectedNote(null);
+                            // URL sync effect will handle the URL update
+                        }}
+                        className="cursor-pointer text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent flex items-center justify-center gap-4 hover:opacity-80 transition-opacity"
+                    >
                         Second Brain
                         <div className="md:hidden flex gap-2">
                             <button
-                                onClick={() => setShowCategoryManager(true)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowCategoryManager(true);
+                                }}
                                 className="p-1 text-zinc-500 hover:text-indigo-400"
                             >
                                 <Folder className="w-5 h-5" />
                             </button>
                             <button
-                                onClick={() => setShowSyncModal(true)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowSyncModal(true);
+                                }}
                                 className="p-1 text-zinc-500 hover:text-indigo-400"
                             >
                                 <RefreshCw className="w-5 h-5" />
@@ -389,6 +440,12 @@ function App() {
                                         onNoteClick={setSelectedNote}
                                         onCategoryClick={(cat) => {
                                             setFilterCategory(cat);
+                                            setFilterTag(null);
+                                            setActiveTab('list');
+                                        }}
+                                        onTagClick={(tag) => {
+                                            setFilterTag(tag);
+                                            setFilterCategory(null);
                                             setActiveTab('list');
                                         }}
                                     />
@@ -426,6 +483,8 @@ function App() {
                                 notes={allNotes}
                                 onDelete={deleteNote}
                                 onNoteClick={setSelectedNote}
+                                onCategoryClick={handleCategoryClick}
+                                onTagClick={handleTagClick}
                                 onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
                                 hasMore={allNotes.length === LIMIT}
                             />

@@ -217,17 +217,32 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     });
   }
 
-  async findAll(limit: number = 20, offset: number = 0, category?: string): Promise<Note[]> {
+  async findAll(limit: number = 20, offset: number = 0, category?: string, tag?: string): Promise<Note[]> {
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
 
-    let sql = 'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes ORDER BY created_at DESC LIMIT ? OFFSET ?';
-    let bind: any[] = [limit, offset];
+    let sql = 'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes';
+    const conditions: string[] = [];
+    const bind: any[] = [];
 
     if (category) {
-      sql = 'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes WHERE category = ? ORDER BY created_at DESC LIMIT ? OFFSET ?';
-      bind = [category, limit, offset];
+      conditions.push('category = ?');
+      bind.push(category);
     }
+
+    if (tag) {
+      // Simple JSON array search using LIKE
+      // This matches "tag", "tag", ... or ["tag"] patterns in the JSON string
+      conditions.push('tags LIKE ?');
+      bind.push(`%"${tag}"%`);
+    }
+
+    if (conditions.length > 0) {
+      sql += ' WHERE ' + conditions.join(' AND ');
+    }
+
+    sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
+    bind.push(limit, offset);
 
     const stmt = this.db.prepare(sql);
     try {

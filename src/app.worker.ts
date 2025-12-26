@@ -14,7 +14,7 @@ export type WorkerMessage =
   | { type: 'INIT' }
   | { type: 'ADD_NOTE'; payload: { text: string; category: string; tags: string[] } }
   | { type: 'SEARCH'; payload: string }
-  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string } }
+  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string; tag?: string } }
   | { type: 'DELETE_NOTE'; payload: number }
   | { type: 'UPDATE_NOTE'; payload: any }
   | { type: 'LIST_CATEGORIES' }
@@ -123,7 +123,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     } else if (type === 'LIST_NOTES') {
       if (!listNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload || {};
-      const results = await listNotesUseCase.execute(payload.limit, payload.offset, payload.category);
+      const results = await listNotesUseCase.execute(payload.limit, payload.offset, payload.category, payload.tag);
       const mappedResults = results.map(r => ({
         ...r,
         created_at: r.createdAt

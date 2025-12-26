@@ -14,11 +14,12 @@ interface NoteListProps {
   onDelete: (id: number) => void;
   onNoteClick: (note: any) => void;
   onCategoryClick?: (category: string) => void;
+  onTagClick?: (tag: string) => void;
   onLoadMore?: () => void;
   hasMore?: boolean;
 }
 
-export function NoteList({ notes, onDelete, onNoteClick, onCategoryClick, onLoadMore, hasMore }: NoteListProps) {
+export function NoteList({ notes, onDelete, onNoteClick, onCategoryClick, onTagClick, onLoadMore, hasMore }: NoteListProps) {
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   if (notes.length === 0) {
@@ -59,10 +60,17 @@ export function NoteList({ notes, onDelete, onNoteClick, onCategoryClick, onLoad
                 </button>
 
                 {note.tags && note.tags.map((tag, i) => (
-                  <span key={i} className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[10px] font-mono bg-zinc-800/30 text-zinc-500 border border-zinc-800/50">
+                  <button
+                    key={i}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onTagClick) onTagClick(tag);
+                    }}
+                    className="inline-flex items-center gap-0.5 px-2 py-1 rounded-md text-[10px] font-mono bg-zinc-800/30 text-zinc-500 hover:text-indigo-400 hover:bg-indigo-500/10 border border-zinc-800/50 hover:border-indigo-500/30 transition-colors"
+                  >
                     <Hash className="w-2.5 h-2.5 opacity-50" />
                     {tag}
-                  </span>
+                  </button>
                 ))}
 
                 {note.distance !== undefined && (
