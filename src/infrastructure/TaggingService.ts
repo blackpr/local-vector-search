@@ -28,6 +28,8 @@ export class TaggingService {
 
   async generateTags(text: string): Promise<string[]> {
     this.trace = []; // Reset trace
+    const manualTags = this.extractHashtags(text);
+
     try {
       if (!this.generator) await this.initialize();
       if (!this.generator) return ['Err:NoGenerator', ...this.trace];
@@ -48,23 +50,35 @@ export class TaggingService {
 
       if (generatedText.length === 0) {
         this.log('EmptyTxt');
+        if (manualTags.length > 0) return manualTags;
         return this.trace; // Return trace as tags
       }
 
       const tags = generatedText.split(',').map((t: string) => t.trim()).filter((t: string) => t.length > 0);
+      let aiTags: string[] = tags;
 
       if (tags.length === 0) {
         // If comma split fails, try space split
         const spaceTags = generatedText.split(' ').map((t: string) => t.trim()).filter((t: string) => t.length > 2);
-        if (spaceTags.length > 0) return spaceTags;
-
-        return [];
+        if (spaceTags.length > 0) {
+          aiTags = spaceTags;
+        } else {
+          aiTags = [];
+        }
       }
 
-      return tags;
+      // Merge and deduplicate
+      return [...new Set([...manualTags, ...aiTags])];
+
     } catch (err) {
       console.error(err);
-      return [];
+      return manualTags; // Return at least manual tags on error
     }
+  }
+
+  private extractHashtags(text: string): string[] {
+    const matches = text.match(/#[\p{L}\p{N}_]+/gu);
+    if (!matches) return [];
+    return matches.map(t => t.slice(1)); // Remove '#'
   }
 }
