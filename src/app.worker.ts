@@ -13,7 +13,7 @@ import { TaggingService } from './infrastructure/TaggingService';
 export type WorkerMessage =
   | { type: 'INIT' }
   | { type: 'ADD_NOTE'; payload: { text: string; category: string; tags: string[] } }
-  | { type: 'SEARCH'; payload: string }
+  | { type: 'SEARCH'; payload: { query: string; limit?: number; offset?: number } }
   | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string; tag?: string } }
   | { type: 'DELETE_NOTE'; payload: number }
   | { type: 'UPDATE_NOTE'; payload: any }
@@ -114,7 +114,12 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     } else if (type === 'SEARCH') {
       if (!searchNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
-      const results = await searchNotesUseCase.execute(payload);
+      // Handle both old string payload (if cached/race condition) and new object payload
+      const query = typeof payload === 'string' ? payload : payload.query;
+      const limit = typeof payload === 'object' ? payload.limit : undefined;
+      const offset = typeof payload === 'object' ? payload.offset : undefined;
+
+      const results = await searchNotesUseCase.execute(query, limit, offset);
       const mappedResults = results.map(r => ({
         ...r,
         created_at: r.createdAt

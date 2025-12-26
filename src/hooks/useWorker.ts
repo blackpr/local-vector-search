@@ -72,12 +72,12 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'ADD_NOTE', payload: { text, category, tags } });
   }, []);
 
-  const search = useCallback((query: string) => {
+  const search = useCallback((query: string, limit: number = 20, offset: number = 0) => {
     if (query.length < 2) {
       setSearchResults([]);
       return;
     }
-    workerRef.current?.postMessage({ type: 'SEARCH', payload: query });
+    workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset } });
   }, []);
 
   const listNotes = useCallback((limit: number = 20, offset: number = 0, category?: string, tag?: string) => {

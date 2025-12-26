@@ -388,7 +388,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     return { imported: importedCount, updated: updatedCount };
   }
 
-  async search(_query: string, limit: number = 10, queryEmbedding?: Float32Array): Promise<SearchResult[]> {
+  async search(_query: string, limit: number = 20, offset: number = 0, queryEmbedding?: Float32Array): Promise<SearchResult[]> {
     if (!this.db) throw new Error('Database not initialized');
     if (!queryEmbedding) throw new Error('Query embedding is required');
 
@@ -405,14 +405,14 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       FROM vec_notes 
       LEFT JOIN notes ON vec_notes.rowid = notes.rowid
       ORDER BY distance ASC 
-      LIMIT ?
+      LIMIT ? OFFSET ?
     `;
 
     const stmt = this.db.prepare(sql);
     const results: SearchResult[] = [];
 
     try {
-      stmt.bind([this.toSqliteBlob(queryEmbedding), limit]);
+      stmt.bind([this.toSqliteBlob(queryEmbedding), limit, offset]);
       while (stmt.step()) {
         const row = stmt.get({}) as any;
         if (row.distance < 1.0) {

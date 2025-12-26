@@ -31,23 +31,26 @@ function App() {
     useEffect(() => {
         if (!isUrlInitialized) return;
         const timer = setTimeout(() => {
-            search(query);
+            // When query changes, we usually want to reset offset to 0 (handled by setQuery wrapper or here)
+            // But if we are restoring from URL, offset might be > 0.
+            // The setQuery wrapper resets it to 0 on typing.
+            // This effect just triggers.
+            search(query, LIMIT, offset);
         }, 300);
         return () => clearTimeout(timer);
-    }, [query, search, isUrlInitialized]);
+    }, [query, offset, search, isUrlInitialized]);
 
     // Initial Load & Tab Change
     useEffect(() => {
         if (!isUrlInitialized) return;
 
         if (activeTab === 'list' && !isIndexing) {
-            // Reset pagination
-            setOffset(0);
-            listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
+            // Fetch notes using current offset (which might be from URL)
+            listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
         }
         // Load categories on start
         listCategories();
-    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, filterTag, isUrlInitialized]);
+    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, filterTag, isUrlInitialized, offset]);
 
     // URL Sync Initialization
     useEffect(() => {
@@ -72,6 +75,22 @@ function App() {
             if (tag) {
                 setFilterTag(tag);
             }
+            // Parse offset
+            const offsetParam = params.get('offset');
+            if (offsetParam) {
+                const parsedOffset = parseInt(offsetParam);
+                if (!isNaN(parsedOffset)) {
+                    setOffset(parsedOffset);
+                    // If immediate search is triggered above, we might need to wait or trigger it with offset here
+                    // But search dependency handles it if we structure it right.
+                    // Actually, the initial search might have run with default 0.
+                    // We should trigger search with offset if 'q' is present.
+                    if (q) {
+                        search(q, LIMIT, parsedOffset);
+                    }
+                }
+            }
+
 
             if (noteId) {
                 getNote(parseInt(noteId)).then(note => {
@@ -81,7 +100,8 @@ function App() {
 
             setIsUrlInitialized(true);
         }
-    }, [status, isUrlInitialized, getNote, search]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [status, isUrlInitialized]); // Removed search/getNote deps to avoid loop, though safe with useCallback
 
     // Update URL on state change
     useEffect(() => {
@@ -93,34 +113,41 @@ function App() {
         if (filterCategory) params.set('cat', filterCategory);
         if (filterTag) params.set('tag', filterTag);
         if (selectedNote) params.set('noteId', selectedNote.id.toString());
+        if (offset > 0) params.set('offset', offset.toString());
 
         const stringified = params.toString();
         const newUrl = stringified ? `?${stringified}` : window.location.pathname;
 
         // Use replaceState to update URL without adding to history (for now)
         window.history.replaceState(null, '', newUrl);
-    }, [activeTab, query, selectedNote, filterCategory, filterTag, isUrlInitialized]);
+    }, [activeTab, query, selectedNote, filterCategory, filterTag, offset, isUrlInitialized]);
 
     const handleLoadMore = () => {
         const newOffset = offset + LIMIT;
         setOffset(newOffset);
-        listNotes(LIMIT, newOffset, filterCategory || undefined, filterTag || undefined);
+        if (activeTab === 'search') {
+            search(query, LIMIT, newOffset);
+        }
+        // For 'list', the useEffect will trigger listNotes automatically when offset changes
     };
 
     const handleAddNote = (text: string, category: string, tags: string[]) => {
         addNote(text, category, tags);
+        setOffset(0);
         setActiveTab('list'); // Switch to list to see it
     };
 
     const handleCategoryClick = (category: string) => {
         setFilterCategory(category === filterCategory ? null : category);
         setFilterTag(null); // Clear tag when correcting category
+        setOffset(0); // Reset pagination
         setActiveTab('list');
     };
 
     const handleTagClick = (tag: string) => {
         setFilterTag(tag === filterTag ? null : tag);
         setFilterCategory(null); // Clear category when selecting tag to avoid intersection for now
+        setOffset(0); // Reset pagination
         setActiveTab('list');
     };
 
@@ -157,18 +184,23 @@ function App() {
                 note={selectedNote}
                 onBack={() => {
                     setSelectedNote(null);
-                    // Refresh in case of edits/deletes
-                    listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
+                    // Refresh in case of edits/deletes - offset is preserved
+                    // But we might want to refresh the list just in case.
+                    // The useEffect won't trigger if nothing changed.
+                    // But deleting/updating calls listNotes from worker events or callbacks?
+                    // Actually NoteDetail callbacks call listNotes manually.
+                    // We should use 'offset' there too.
+                    listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
                 }}
                 onDelete={(id) => {
                     deleteNote(id);
                     setSelectedNote(null);
-                    listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
+                    listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
                 }}
                 onSave={async (id, text, category, tags) => {
                     updateNote(id, text, category, tags);
                     setSelectedNote(null);
-                    listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined); // Refresh list to show change
+                    listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined); // Refresh list to show change
                 }}
                 onAutoTags={generateTags}
             />
@@ -180,7 +212,7 @@ function App() {
     {/* Tabs */ }
     <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md sticky top-4 z-20 backdrop-blur-md shadow-2xl shadow-black/50">
         <button
-            onClick={() => setActiveTab('search')}
+            onClick={() => { setActiveTab('search'); setOffset(0); }}
             className={clsx(
                 "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                 activeTab === 'search' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
@@ -189,7 +221,7 @@ function App() {
             <Search className="w-4 h-4" /> Search
         </button>
         <button
-            onClick={() => setActiveTab('list')}
+            onClick={() => { setActiveTab('list'); setOffset(0); }}
             className={clsx(
                 "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                 activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
@@ -198,7 +230,7 @@ function App() {
             <List className="w-4 h-4" /> Notes
         </button>
         <button
-            onClick={() => setActiveTab('add')}
+            onClick={() => { setActiveTab('add'); setOffset(0); }}
             className={clsx(
                 "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                 activeTab === 'add' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
@@ -337,6 +369,7 @@ function App() {
                             setFilterCategory(null);
                             setFilterTag(null);
                             setSelectedNote(null);
+                            setOffset(0);
                         }}
                         className="cursor-pointer inline-flex items-center justify-center p-3 bg-zinc-900 rounded-2xl ring-1 ring-zinc-800 shadow-lg shadow-indigo-500/10 mb-4 hover:ring-indigo-500/50 transition-all hover:scale-105 active:scale-95"
                     >
@@ -391,7 +424,7 @@ function App() {
                     {/* Tabs */}
                     <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md sticky top-4 z-20 backdrop-blur-md">
                         <button
-                            onClick={() => setActiveTab('search')}
+                            onClick={() => { setActiveTab('search'); setOffset(0); }}
                             className={clsx(
                                 "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                                 activeTab === 'search' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
@@ -400,7 +433,7 @@ function App() {
                             <Search className="w-4 h-4" /> Search
                         </button>
                         <button
-                            onClick={() => setActiveTab('list')}
+                            onClick={() => { setActiveTab('list'); setOffset(0); }}
                             className={clsx(
                                 "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                                 activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
@@ -409,7 +442,7 @@ function App() {
                             <List className="w-4 h-4" /> All Notes
                         </button>
                         <button
-                            onClick={() => setActiveTab('add')}
+                            onClick={() => { setActiveTab('add'); setOffset(0); }}
                             className={clsx(
                                 "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
                                 activeTab === 'add' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
@@ -425,15 +458,33 @@ function App() {
                         </div>
                     )}
 
+
+
                     {activeTab === 'search' && (
                         <div className="space-y-4">
                             <SearchBar
                                 query={query}
-                                setQuery={setQuery}
+                                setQuery={(q) => {
+                                    setQuery(q);
+                                    setOffset(0); // Reset offset on new search
+                                }}
                                 isIndexing={isIndexing}
                             />
                             {searchResults.length > 0 ? (
                                 <div className="pt-2 animate-in fade-in slide-in-from-bottom-8 duration-700">
+                                    <div className="flex justify-between items-center px-2 mb-2">
+                                        <h2 className="text-xl font-semibold text-zinc-200">
+                                            {offset > 0 ? `Results (Page ${offset / LIMIT + 1})` : 'Top Results'}
+                                        </h2>
+                                        {offset > 0 && (
+                                            <button
+                                                onClick={() => { setOffset(0); search(query, LIMIT, 0); }}
+                                                className="text-xs text-indigo-400 hover:text-indigo-300"
+                                            >
+                                                Back to Start
+                                            </button>
+                                        )}
+                                    </div>
                                     <NoteList
                                         notes={searchResults}
                                         onDelete={deleteNote}
@@ -448,6 +499,8 @@ function App() {
                                             setFilterCategory(null);
                                             setActiveTab('list');
                                         }}
+                                        onLoadMore={searchResults.length === LIMIT ? handleLoadMore : undefined}
+                                        hasMore={searchResults.length === LIMIT}
                                     />
                                 </div>
                             ) : query.length > 1 ? (
@@ -496,7 +549,7 @@ function App() {
                     )}
 
                 </main>
-            </div>
+            </div >
 
             {showSyncModal && (
                 <SyncModal
@@ -506,17 +559,20 @@ function App() {
                     onDownloadDb={exportDatabase}
                     onUploadDb={importDatabase}
                 />
-            )}
+            )
+            }
 
-            {showCategoryManager && (
-                <CategoryManager
-                    categories={categories}
-                    onAdd={addCategory}
-                    onDelete={deleteCategory}
-                    onClose={() => setShowCategoryManager(false)}
-                />
-            )}
-        </div>
+            {
+                showCategoryManager && (
+                    <CategoryManager
+                        categories={categories}
+                        onAdd={addCategory}
+                        onDelete={deleteCategory}
+                        onClose={() => setShowCategoryManager(false)}
+                    />
+                )
+            }
+        </div >
     );
 }
 

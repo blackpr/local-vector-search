@@ -10,8 +10,8 @@ export class SearchNotesUseCase {
     this.vectorService = vectorService;
   }
 
-  async execute(query: string): Promise<SearchResult[]> {
+  async execute(query: string, limit: number = 20, offset: number = 0): Promise<SearchResult[]> {
     const queryVector = await this.vectorService.generateEmbedding(query, true);
-    return this.searchService.search(query, 10, queryVector);
+    return this.searchService.search(query, limit, offset, queryVector);
   }
 }

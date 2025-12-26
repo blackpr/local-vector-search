@@ -5,5 +5,5 @@ export interface SearchResult extends Note {
 }
 
 export interface SearchService {
-  search(query: string, limit?: number, queryEmbedding?: Float32Array): Promise<SearchResult[]>;
+  search(query: string, limit?: number, offset?: number, queryEmbedding?: Float32Array): Promise<SearchResult[]>;
 }
