@@ -1,40 +1,62 @@
 import { useState, useEffect } from 'react';
 import { useWorker } from './hooks/useWorker';
-import { Search, Plus, Brain, List, RefreshCw, Folder, Sparkles, Pin } from 'lucide-react';
-import clsx from 'clsx';
-import { NoteList } from './presentation/components/NoteList';
-import { AddNoteForm } from './presentation/components/AddNoteForm';
-import { SearchBar } from './presentation/components/SearchBar';
-import { StatusBadge } from './presentation/components/StatusBadge';
-import { SyncModal } from './presentation/components/SyncModal';
+import { useUrlSync } from './hooks/useUrlSync';
 import { NoteDetail } from './presentation/components/NoteDetail';
+import { SyncModal } from './presentation/components/SyncModal';
 import { CategoryManager } from './presentation/components/CategoryManager';
+import { AppLayout } from './presentation/components/Layout/AppLayout';
+import { Header } from './presentation/components/Layout/Header';
+import { Navigation } from './presentation/components/Layout/Navigation';
+import { SearchView } from './presentation/views/SearchView';
+import { NoteListView } from './presentation/views/NoteListView';
+import { AddNoteView } from './presentation/views/AddNoteView';
 
 function App() {
     const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
+
+    // UI State
     const [query, setQuery] = useState('');
     const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list' | 'pinned'>('search');
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [isUrlInitialized, setIsUrlInitialized] = useState(false);
 
-    // Routing State
+    // Selected Note / Routing
     const [selectedNote, setSelectedNote] = useState<any | null>(null);
     const [showCategoryManager, setShowCategoryManager] = useState(false);
+
+    // Filters
     const [filterCategory, setFilterCategory] = useState<string | null>(null);
     const [filterTag, setFilterTag] = useState<string | null>(null);
 
-    // Pagination State
+    // Pagination
     const [offset, setOffset] = useState(0);
     const LIMIT = 20;
+
+    // URL Sync Hook
+    useUrlSync({
+        status,
+        isUrlInitialized,
+        setIsUrlInitialized,
+        activeTab,
+        query,
+        filterCategory,
+        filterTag,
+        offset,
+        selectedNote,
+        setActiveTab,
+        setQuery,
+        setFilterCategory,
+        setFilterTag,
+        setOffset,
+        setSelectedNote,
+        search,
+        getNote
+    });
 
     // Debounce search
     useEffect(() => {
         if (!isUrlInitialized) return;
         const timer = setTimeout(() => {
-            // When query changes, we usually want to reset offset to 0 (handled by setQuery wrapper or here)
-            // But if we are restoring from URL, offset might be > 0.
-            // The setQuery wrapper resets it to 0 on typing.
-            // This effect just triggers.
             search(query, LIMIT, offset);
         }, 300);
         return () => clearTimeout(timer);
@@ -45,7 +67,6 @@ function App() {
         if (!isUrlInitialized) return;
 
         if (activeTab === 'list' && !isIndexing) {
-            // Fetch notes using current offset (which might be from URL)
             listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
         } else if (activeTab === 'pinned' && !isIndexing) {
             listNotes(LIMIT, offset, undefined, undefined, true);
@@ -54,107 +75,43 @@ function App() {
         listCategories();
     }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, filterTag, isUrlInitialized, offset]);
 
-    // URL Sync Initialization
-    useEffect(() => {
-        if (status === 'ready' && !isUrlInitialized) {
-            const params = new URLSearchParams(window.location.search);
-            const tab = params.get('tab');
-            const q = params.get('q');
-            const noteId = params.get('noteId');
-            const cat = params.get('cat');
-            const tag = params.get('tag');
-
-            if (tab && ['search', 'add', 'list', 'pinned'].includes(tab)) {
-                setActiveTab(tab as any);
-            }
-            if (q) {
-                setQuery(q);
-                search(q); // Trigger immediate search
-            }
-            if (cat) {
-                setFilterCategory(cat);
-            }
-            if (tag) {
-                setFilterTag(tag);
-            }
-            // Parse offset
-            const offsetParam = params.get('offset');
-            if (offsetParam) {
-                const parsedOffset = parseInt(offsetParam);
-                if (!isNaN(parsedOffset)) {
-                    setOffset(parsedOffset);
-                    // If immediate search is triggered above, we might need to wait or trigger it with offset here
-                    // But search dependency handles it if we structure it right.
-                    // Actually, the initial search might have run with default 0.
-                    // We should trigger search with offset if 'q' is present.
-                    if (q) {
-                        search(q, LIMIT, parsedOffset);
-                    }
-                }
-            }
-
-
-            if (noteId) {
-                getNote(parseInt(noteId)).then(note => {
-                    if (note) setSelectedNote(note);
-                });
-            }
-
-            setIsUrlInitialized(true);
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [status, isUrlInitialized]); // Removed search/getNote deps to avoid loop, though safe with useCallback
-
-    // Update URL on state change
-    useEffect(() => {
-        if (!isUrlInitialized) return;
-
-        const params = new URLSearchParams();
-        if (activeTab !== 'search') params.set('tab', activeTab);
-        if (query) params.set('q', query);
-        if (filterCategory) params.set('cat', filterCategory);
-        if (filterTag) params.set('tag', filterTag);
-        if (selectedNote) params.set('noteId', selectedNote.id.toString());
-        if (offset > 0) params.set('offset', offset.toString());
-
-        const stringified = params.toString();
-        const newUrl = stringified ? `?${stringified}` : window.location.pathname;
-
-        // Use replaceState to update URL without adding to history (for now)
-        window.history.replaceState(null, '', newUrl);
-    }, [activeTab, query, selectedNote, filterCategory, filterTag, offset, isUrlInitialized]);
-
+    // Handlers
     const handleLoadMore = () => {
         const newOffset = offset + LIMIT;
         setOffset(newOffset);
         if (activeTab === 'search') {
             search(query, LIMIT, newOffset);
         }
-        // For 'list', the useEffect will trigger listNotes automatically when offset changes
+        // For 'list', useEffect triggers listNotes
     };
 
     const handleAddNote = (text: string, category: string, tags: string[]) => {
         addNote(text, category, tags);
         setOffset(0);
-        setActiveTab('list'); // Switch to list to see it
+        setActiveTab('list');
     };
 
     const handleCategoryClick = (category: string) => {
         setFilterCategory(category === filterCategory ? null : category);
-        setFilterTag(null); // Clear tag when correcting category
-        setOffset(0); // Reset pagination
+        setFilterTag(null);
+        setOffset(0);
         setActiveTab('list');
     };
 
     const handleTagClick = (tag: string) => {
         setFilterTag(tag === filterTag ? null : tag);
-        setFilterCategory(null); // Clear category when selecting tag to avoid intersection for now
-        setOffset(0); // Reset pagination
+        setFilterCategory(null);
+        setOffset(0);
         setActiveTab('list');
     };
 
     const handlePin = (note: any) => {
         updateNote(note.id, note.text, note.category, note.tags, !note.isPinned);
+        // Refresh list if we are in Pinned view, might need to wait for update
+        if (activeTab === 'pinned') {
+            // listNotes will be called? No, updateNote probably updates local state inside worker/useWorker, 
+            // but we might need to re-fetch to be sure or useWorker updates 'allNotes' automatically via events.
+        }
     };
 
     const handleExport = async () => {
@@ -181,418 +138,147 @@ function App() {
         });
     };
 
-    // ... (rest of imports)
+    const handleReset = () => {
+        setActiveTab('search');
+        setQuery('');
+        setFilterCategory(null);
+        setFilterTag(null);
+        setSelectedNote(null);
+        setOffset(0);
+    };
 
-    // View Logic
+    // If viewing a note detail
     if (selectedNote) {
         return (
-            <NoteDetail
-                note={selectedNote}
-                onBack={() => {
-                    setSelectedNote(null);
-                    // Refresh in case of edits/deletes - offset is preserved
-                    // But we might want to refresh the list just in case.
-                    // The useEffect won't trigger if nothing changed.
-                    // But deleting/updating calls listNotes from worker events or callbacks?
-                    // Actually NoteDetail callbacks call listNotes manually.
-                    // We should use 'offset' there too.
-                    listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
-                }}
-                onDelete={(id) => {
-                    deleteNote(id);
-                    setSelectedNote(null);
-                    listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
-                }}
-                onSave={async (id, text, category, tags) => {
-                    updateNote(id, text, category, tags);
-                    setSelectedNote(null);
-                    listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined); // Refresh list to show change
-                }}
-                onAutoTags={generateTags}
-            />
+            <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30 p-4 md:p-8">
+                <div className="max-w-2xl mx-auto">
+                    <NoteDetail
+                        note={selectedNote}
+                        onBack={() => {
+                            setSelectedNote(null);
+                            listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
+                        }}
+                        onDelete={(id) => {
+                            deleteNote(id);
+                            setSelectedNote(null);
+                            listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
+                        }}
+                        onSave={async (id, text, category, tags) => {
+                            updateNote(id, text, category, tags);
+                            setSelectedNote(null);
+                            listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
+                        }}
+                        onAutoTags={generateTags}
+                    />
+                </div>
+            </div>
         );
     }
 
-    // ... (header)
-
-    {/* Tabs */ }
-    <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md sticky top-4 z-20 backdrop-blur-md shadow-2xl shadow-black/50">
-        <button
-            onClick={() => { setActiveTab('search'); setOffset(0); }}
-            className={clsx(
-                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                activeTab === 'search' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
-            )}
-        >
-            <Search className="w-4 h-4" /> Search
-        </button>
-        <button
-            onClick={() => { setActiveTab('list'); setOffset(0); }}
-            className={clsx(
-                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
-            )}
-        >
-            <List className="w-4 h-4" /> Notes
-        </button>
-        <button
-            onClick={() => { setActiveTab('add'); setOffset(0); }}
-            className={clsx(
-                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                activeTab === 'add' ? "bg-zinc-800 text-white shadow-sm ring-1 ring-white/10" : "text-zinc-400 hover:text-zinc-200"
-            )}
-        >
-            <Plus className="w-4 h-4" /> Add
-        </button>
-    </div>
-
-    {
-        status === 'error' && (
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center text-sm">
-                {error || 'An error occurred'}
-            </div>
-        )
-    }
-
-    {
-        activeTab === 'search' && (
-            <div className="space-y-4">
-                <SearchBar
-                    query={query}
-                    setQuery={setQuery}
-                    isIndexing={isIndexing}
-                />
-
-                {searchResults.length > 0 ? (
-                    <div className="pt-2 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                        <NoteList
-                            notes={searchResults}
-                            onDelete={deleteNote}
-                            onNoteClick={setSelectedNote}
-                            onCategoryClick={(cat) => {
-                                setFilterCategory(cat);
-                                setFilterTag(null);
-                                setActiveTab('list');
-                            }}
-                            onTagClick={(tag) => {
-                                setFilterTag(tag);
-                                setFilterCategory(null);
-                                setActiveTab('list');
-                            }}
-                        />
-                    </div>
-                ) : query.length > 1 ? (
-                    <div className="text-center py-12 text-zinc-600">
-                        <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        <p>No matching thoughts found.</p>
-                    </div>
-                ) : (
-                    <div className="text-center py-12 text-zinc-600">
-                        <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                        <p>Type to explore your memory.</p>
-                    </div>
-                )}
-            </div>
-        )
-    }
-
-    {
-        activeTab === 'list' && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <div className="flex justify-between items-center px-2">
-                    <h2 className="text-xl font-semibold text-zinc-200 flex items-center gap-2">
-                        {filterCategory ? (
-                            <>
-                                <span className="text-zinc-400">Category:</span>
-                                <span className="text-indigo-400">{filterCategory}</span>
-                                <button onClick={() => setFilterCategory(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
-                            </>
-                        ) : filterTag ? (
-                            <>
-                                <span className="text-zinc-400">Tag:</span>
-                                <span className="text-indigo-400">#{filterTag}</span>
-                                <button onClick={() => setFilterTag(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
-                            </>
-                        ) : (
-                            offset > 0 ? `Notes (Page ${offset / LIMIT + 1})` : 'All Notes'
-                        )}
-                    </h2>
-                    {offset > 0 && (
-                        <button
-                            onClick={() => { setOffset(0); listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined); }}
-                            className="text-xs text-indigo-400 hover:text-indigo-300"
-                        >
-                            Back to Start
-                        </button>
-                    )}
-                </div>
-                <NoteList
-                    notes={allNotes}
-                    onDelete={deleteNote}
-                    onNoteClick={setSelectedNote}
-                    onCategoryClick={handleCategoryClick}
-                    onTagClick={handleTagClick}
-                    onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
-                    hasMore={allNotes.length === LIMIT}
-                />
-            </div>
-        )
-    }
-
-    {
-        activeTab === 'add' && (
-            <AddNoteForm onAdd={handleAddNote} categories={categories} isProcessing={isIndexing} onAutoCategory={suggestCategory} />
-        )
-    }
-
     return (
-        <div className="min-h-screen bg-zinc-950 text-zinc-100 font-sans selection:bg-indigo-500/30">
-            <div className="max-w-2xl mx-auto p-4 md:p-8 flex flex-col min-h-screen">
+        <AppLayout>
+            <Header
+                status={status}
+                progress={progress}
+                error={error}
+                onShowCategoryManager={() => setShowCategoryManager(true)}
+                onShowSyncModal={() => setShowSyncModal(true)}
+                onReset={handleReset}
+            />
 
-                {/* Header */}
-                <header className="mb-8 text-center space-y-2 relative">
-                    <div className="absolute right-0 top-0 hidden md:flex items-center gap-2">
-                        <button
-                            onClick={() => setShowCategoryManager(true)}
-                            className="p-2 text-zinc-500 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors"
-                            title="Manage Categories"
-                        >
-                            <Folder className="w-5 h-5" />
-                        </button>
-                        <button
-                            onClick={() => setShowSyncModal(true)}
-                            className="p-2 text-zinc-500 hover:text-indigo-400 hover:bg-zinc-800 rounded-lg transition-colors"
-                            title="Sync Notes"
-                        >
-                            <RefreshCw className="w-5 h-5" />
-                        </button>
-                    </div>
+            <Navigation
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                setOffset={setOffset}
+            />
 
-                    <div
-                        onClick={() => {
-                            setActiveTab('search');
-                            setQuery('');
-                            setFilterCategory(null);
-                            setFilterTag(null);
-                            setSelectedNote(null);
-                            setOffset(0);
-                        }}
-                        className="cursor-pointer inline-flex items-center justify-center p-3 bg-zinc-900 rounded-2xl ring-1 ring-zinc-800 shadow-lg shadow-indigo-500/10 mb-4 hover:ring-indigo-500/50 transition-all hover:scale-105 active:scale-95"
-                    >
-                        <Brain className="w-8 h-8 text-indigo-400" />
-                    </div>
+            {status === 'error' && (
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center text-sm my-4">
+                    {error || 'An error occurred'}
+                </div>
+            )}
 
-                    <h1
-                        onClick={() => {
-                            setActiveTab('search');
-                            setQuery('');
-                            setFilterCategory(null);
-                            setFilterTag(null);
-                            setSelectedNote(null);
-                            // URL sync effect will handle the URL update
-                        }}
-                        className="cursor-pointer text-3xl md:text-4xl font-bold tracking-tight bg-gradient-to-b from-white to-zinc-400 bg-clip-text text-transparent flex items-center justify-center gap-4 hover:opacity-80 transition-opacity"
-                    >
-                        Second Brain
-                        <div className="md:hidden flex gap-2">
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowCategoryManager(true);
-                                }}
-                                className="p-1 text-zinc-500 hover:text-indigo-400"
-                            >
-                                <Folder className="w-5 h-5" />
-                            </button>
-                            <button
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setShowSyncModal(true);
-                                }}
-                                className="p-1 text-zinc-500 hover:text-indigo-400"
-                            >
-                                <RefreshCw className="w-5 h-5" />
-                            </button>
-                        </div>
-                    </h1>
-                    <p className="text-zinc-500">
-                        Offline Semantic Search Engine
-                    </p>
+            <main className="flex-1 flex flex-col gap-6 mt-6">
+                {activeTab === 'search' && (
+                    <SearchView
+                        query={query}
+                        setQuery={setQuery}
+                        setOffset={setOffset}
+                        isIndexing={isIndexing}
+                        searchResults={searchResults}
+                        offset={offset}
+                        LIMIT={LIMIT}
+                        search={search}
+                        deleteNote={deleteNote}
+                        setSelectedNote={setSelectedNote}
+                        setFilterCategory={handleCategoryClick}
+                        setFilterTag={handleTagClick}
+                        setActiveTab={setActiveTab}
+                        handlePin={handlePin}
+                        handleLoadMore={handleLoadMore}
+                    />
+                )}
 
-                    <div className="flex flex-col items-center justify-center gap-2 text-xs font-medium mt-4 h-8">
-                        <StatusBadge status={status} progress={status === 'error' ? error : progress} />
-                    </div>
-                </header>
-
-                {/* Main Content */}
-                <main className="flex-1 flex flex-col gap-6">
-
-                    {/* Tabs */}
-                    <div className="flex p-1 bg-zinc-900/50 rounded-xl ring-1 ring-zinc-800 self-center w-full max-w-md sticky top-4 z-20 backdrop-blur-md">
-                        <button
-                            onClick={() => { setActiveTab('search'); setOffset(0); }}
-                            className={clsx(
-                                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                                activeTab === 'search' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
-                            )}
-                        >
-                            <Search className="w-4 h-4" /> Search
-                        </button>
-                        <button
-                            onClick={() => { setActiveTab('list'); setOffset(0); }}
-                            className={clsx(
-                                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                                activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
-                            )}
-                        >
-                            <List className="w-4 h-4" /> All
-                        </button>
-                        <button
-                            onClick={() => { setActiveTab('pinned'); setOffset(0); }}
-                            className={clsx(
-                                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                                activeTab === 'pinned' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
-                            )}
-                        >
-                            <Pin className="w-4 h-4" /> Pinned
-                        </button>
-                        <button
-                            onClick={() => { setActiveTab('add'); setOffset(0); }}
-                            className={clsx(
-                                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
-                                activeTab === 'add' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
-                            )}
-                        >
-                            <Plus className="w-4 h-4" /> Add
-                        </button>
-                    </div>
-
-                    {status === 'error' && (
-                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center text-sm">
-                            {error || 'An error occurred'}
-                        </div>
-                    )}
-
-                    {activeTab === 'search' && (
-                        <div className="space-y-4">
-                            <SearchBar
-                                query={query}
-                                setQuery={(q) => {
-                                    setQuery(q);
-                                    setOffset(0); // Reset offset on new search
-                                }}
-                                isIndexing={isIndexing}
-                            />
-                            {searchResults.length > 0 ? (
-                                <div className="pt-2 animate-in fade-in slide-in-from-bottom-8 duration-700">
-                                    <div className="flex justify-between items-center px-2 mb-2">
-                                        <h2 className="text-xl font-semibold text-zinc-200">
-                                            {offset > 0 ? `Results (Page ${offset / LIMIT + 1})` : 'Top Results'}
-                                        </h2>
-                                        {offset > 0 && (
-                                            <button
-                                                onClick={() => { setOffset(0); search(query, LIMIT, 0); }}
-                                                className="text-xs text-indigo-400 hover:text-indigo-300"
-                                            >
-                                                Back to Start
-                                            </button>
-                                        )}
-                                    </div>
-                                    <NoteList
-                                        notes={searchResults}
-                                        onDelete={deleteNote}
-                                        onNoteClick={setSelectedNote}
-                                        onCategoryClick={(cat) => {
-                                            setFilterCategory(cat);
-                                            setFilterTag(null);
-                                            setActiveTab('list');
-                                        }}
-                                        onTagClick={(tag) => {
-                                            setFilterTag(tag);
-                                            setFilterCategory(null);
-                                            setActiveTab('list');
-                                        }}
-                                        onPin={handlePin}
-                                        onLoadMore={searchResults.length === LIMIT ? handleLoadMore : undefined}
-                                        hasMore={searchResults.length === LIMIT}
-                                    />
-                                </div>
-                            ) : query.length > 1 ? (
-                                <div className="text-center py-12 text-zinc-600">
-                                    <Search className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                    <p>No matching thoughts found.</p>
-                                </div>
+                {activeTab === 'list' && (
+                    <NoteListView
+                        title={
+                            filterCategory ? (
+                                <>
+                                    <span className="text-zinc-400">Category:</span>
+                                    <span className="text-indigo-400">{filterCategory}</span>
+                                    <button onClick={() => setFilterCategory(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
+                                </>
+                            ) : filterTag ? (
+                                <>
+                                    <span className="text-zinc-400">Tag:</span>
+                                    <span className="text-indigo-400">#{filterTag}</span>
+                                    <button onClick={() => setFilterTag(null)} className="ml-2 text-xs bg-zinc-800 px-2 py-1 rounded-full text-zinc-400 hover:text-white">Clear</button>
+                                </>
                             ) : (
-                                <div className="text-center py-12 text-zinc-600">
-                                    <Sparkles className="w-12 h-12 mx-auto mb-3 opacity-20" />
-                                    <p>Type to explore your memory.</p>
-                                </div>
-                            )}
-                        </div>
-                    )}
+                                offset > 0 ? `Notes (Page ${offset / LIMIT + 1})` : 'All Notes'
+                            )
+                        }
+                        notes={allNotes}
+                        offset={offset}
+                        LIMIT={LIMIT}
+                        onResetOffset={() => { setOffset(0); listNotes(LIMIT, 0); }}
+                        onDelete={deleteNote}
+                        onNoteClick={setSelectedNote}
+                        onCategoryClick={handleCategoryClick}
+                        onTagClick={handleTagClick}
+                        onPin={handlePin}
+                        onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                        hasMore={allNotes.length === LIMIT}
+                    />
+                )}
 
-                    {activeTab === 'list' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex justify-between items-center px-2">
-                                <h2 className="text-xl font-semibold text-zinc-200">
-                                    {offset > 0 ? `Notes (Page ${offset / LIMIT + 1})` : 'All Notes'}
-                                </h2>
-                                {offset > 0 && (
-                                    <button
-                                        onClick={() => { setOffset(0); listNotes(LIMIT, 0); }}
-                                        className="text-xs text-indigo-400 hover:text-indigo-300"
-                                    >
-                                        Back to Start
-                                    </button>
-                                )}
-                            </div>
-                            <NoteList
-                                notes={allNotes}
-                                onDelete={deleteNote}
-                                onNoteClick={setSelectedNote}
-                                onCategoryClick={handleCategoryClick}
-                                onTagClick={handleTagClick}
-                                onPin={handlePin}
-                                onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
-                                hasMore={allNotes.length === LIMIT}
-                            />
-                        </div>
-                    )}
+                {activeTab === 'pinned' && (
+                    <NoteListView
+                        title={offset > 0 ? `Pinned Notes (Page ${offset / LIMIT + 1})` : 'Pinned Notes'}
+                        notes={allNotes.filter(n => n.isPinned)}
+                        offset={offset}
+                        LIMIT={LIMIT}
+                        onResetOffset={() => { setOffset(0); listNotes(LIMIT, 0, undefined, undefined, true); }}
+                        onDelete={deleteNote}
+                        onNoteClick={setSelectedNote}
+                        onCategoryClick={handleCategoryClick}
+                        onTagClick={handleTagClick}
+                        onPin={handlePin}
+                        onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                        hasMore={allNotes.length === LIMIT}
+                    />
+                )}
 
-                    {activeTab === 'pinned' && (
-                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex justify-between items-center px-2">
-                                <h2 className="text-xl font-semibold text-zinc-200">
-                                    {offset > 0 ? `Pinned Notes (Page ${offset / LIMIT + 1})` : 'Pinned Notes'}
-                                </h2>
-                                {offset > 0 && (
-                                    <button
-                                        onClick={() => { setOffset(0); listNotes(LIMIT, 0, undefined, undefined, true); }}
-                                        className="text-xs text-indigo-400 hover:text-indigo-300"
-                                    >
-                                        Back to Start
-                                    </button>
-                                )}
-                            </div>
-                            <NoteList
-                                notes={allNotes.filter(n => n.isPinned)}
-                                onDelete={deleteNote}
-                                onNoteClick={setSelectedNote}
-                                onCategoryClick={handleCategoryClick}
-                                onTagClick={handleTagClick}
-                                onPin={handlePin}
-                                onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
-                                hasMore={allNotes.length === LIMIT}
-                            />
-                        </div>
-                    )}
-
-                    {activeTab === 'add' && (
-                        <AddNoteForm onAdd={handleAddNote} categories={categories} isProcessing={isIndexing} onAutoCategory={suggestCategory} onAutoTags={generateTags} />
-                    )}
-
-                </main>
-            </div >
+                {activeTab === 'add' && (
+                    <AddNoteView
+                        onAdd={handleAddNote}
+                        categories={categories}
+                        isProcessing={isIndexing}
+                        onAutoCategory={suggestCategory}
+                        onAutoTags={generateTags}
+                    />
+                )}
+            </main>
 
             {showSyncModal && (
                 <SyncModal
@@ -602,20 +288,17 @@ function App() {
                     onDownloadDb={exportDatabase}
                     onUploadDb={importDatabase}
                 />
-            )
-            }
+            )}
 
-            {
-                showCategoryManager && (
-                    <CategoryManager
-                        categories={categories}
-                        onAdd={addCategory}
-                        onDelete={deleteCategory}
-                        onClose={() => setShowCategoryManager(false)}
-                    />
-                )
-            }
-        </div >
+            {showCategoryManager && (
+                <CategoryManager
+                    categories={categories}
+                    onAdd={addCategory}
+                    onDelete={deleteCategory}
+                    onClose={() => setShowCategoryManager(false)}
+                />
+            )}
+        </AppLayout>
     );
 }
 
