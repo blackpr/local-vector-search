@@ -5,8 +5,8 @@ export function useWorker() {
   const workerRef = useRef<Worker | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [error, setError] = useState<string | null>(null);
-  const [searchResults, setSearchResults] = useState<Array<{ id: number; text: string; category: string; created_at: string | Date; tags?: string[]; distance: number }>>([]);
-  const [allNotes, setAllNotes] = useState<Array<{ id: number; text: string; category: string; created_at: string }>>([]);
+  const [searchResults, setSearchResults] = useState<Array<{ id: number; text: string; category: string; created_at: string | Date; tags?: string[]; distance: number; isPinned?: boolean }>>([]);
+  const [allNotes, setAllNotes] = useState<Array<{ id: number; text: string; category: string; created_at: string; isPinned?: boolean }>>([]);
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [isIndexing, setIsIndexing] = useState(false);
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
@@ -26,9 +26,18 @@ export function useWorker() {
         setProgress(null);
       } else if (type === 'NOTE_ADDED') {
         setIsIndexing(false);
-        worker.postMessage({ type: 'LIST_NOTES' });
+        // worker.postMessage({ type: 'LIST_NOTES' });
       } else if (type === 'NOTE_UPDATED') {
-        worker.postMessage({ type: 'LIST_NOTES' });
+        const updatedNote = (e.data as any).payload;
+        if (updatedNote) {
+          setSearchResults(prev => prev.map(n =>
+            n.id === updatedNote.id ? { ...n, ...updatedNote, isPinned: updatedNote.isPinned } : n
+          ));
+          setAllNotes(prev => prev.map(n =>
+            n.id === updatedNote.id ? { ...n, ...updatedNote, isPinned: updatedNote.isPinned } : n
+          ));
+        }
+        // worker.postMessage({ type: 'LIST_NOTES' });
       } else if (type === 'SEARCH_RESULTS') {
         setSearchResults((e.data as any).results);
       } else if (type === 'NOTES_LISTED') {
@@ -80,8 +89,8 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset } });
   }, []);
 
-  const listNotes = useCallback((limit: number = 20, offset: number = 0, category?: string, tag?: string) => {
-    workerRef.current?.postMessage({ type: 'LIST_NOTES', payload: { limit, offset, category, tag } });
+  const listNotes = useCallback((limit: number = 20, offset: number = 0, category?: string, tag?: string, pinned?: boolean) => {
+    workerRef.current?.postMessage({ type: 'LIST_NOTES', payload: { limit, offset, category, tag, pinned } });
   }, []);
 
   const suggestCategory = useCallback((text: string) => {
@@ -102,8 +111,8 @@ export function useWorker() {
     workerRef.current?.postMessage({ type: 'DELETE_NOTE', payload: id });
   }, []);
 
-  const updateNote = useCallback((id: number, text: string, category: string, tags: string[] = []) => {
-    workerRef.current?.postMessage({ type: 'UPDATE_NOTE', payload: { id, text, category, tags } });
+  const updateNote = useCallback((id: number, text: string, category: string, tags: string[] = [], isPinned?: boolean) => {
+    workerRef.current?.postMessage({ type: 'UPDATE_NOTE', payload: { id, text, category, tags, isPinned } });
   }, []);
 
   const listCategories = useCallback(() => {

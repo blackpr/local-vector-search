@@ -4,6 +4,7 @@ export interface Note {
   text: string;
   category: string;
   tags?: string[];
+  isPinned?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }

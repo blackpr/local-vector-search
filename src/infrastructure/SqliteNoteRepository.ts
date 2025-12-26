@@ -27,6 +27,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         category TEXT, -- Legacy column
         category_id INTEGER,
         tags TEXT, -- JSON array of strings
+        is_pinned INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         uuid TEXT UNIQUE,
@@ -40,10 +41,12 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     const hasUpdatedAt = columns.some((c: any) => c.name === 'updated_at');
     const hasCategoryId = columns.some((c: any) => c.name === 'category_id');
     const hasTags = columns.some((c: any) => c.name === 'tags');
+    const hasIsPinned = columns.some((c: any) => c.name === 'is_pinned');
 
     if (!hasUuid) this.db.exec('ALTER TABLE notes ADD COLUMN uuid TEXT');
     if (!hasUpdatedAt) this.db.exec('ALTER TABLE notes ADD COLUMN updated_at DATETIME');
     if (!hasTags) this.db.exec('ALTER TABLE notes ADD COLUMN tags TEXT');
+    if (!hasIsPinned) this.db.exec('ALTER TABLE notes ADD COLUMN is_pinned INTEGER DEFAULT 0');
 
     if (!hasCategoryId) {
       console.log('Migrating: Adding category_id column to notes table');
@@ -79,6 +82,9 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
 
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_uuid ON notes(uuid)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_id ON notes(category_id)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_created_at ON notes(category, created_at DESC)');
+    this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_is_pinned_created_at ON notes(is_pinned, created_at DESC)');
   }
 
   // ... (CategoryRepository impl unchanged)
@@ -119,7 +125,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
   async findById(id: number): Promise<Note | null> {
     if (!this.db) throw new Error('Database not initialized');
     const row = this.db.selectObject(
-      'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes WHERE rowid = ?',
+      'SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at FROM notes WHERE rowid = ?',
       [id]
     ) as any;
 
@@ -136,6 +142,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       text: row.text,
       category: row.category,
       tags,
+      isPinned: !!row.is_pinned,
       createdAt: new Date(row.created_at),
       updatedAt: new Date(row.updated_at),
     };
@@ -149,6 +156,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     }
     return vector;
   }
+
+
 
   async save(note: NewNote, embedding?: Float32Array): Promise<Note> {
     if (!this.db) throw new Error('Database not initialized');
@@ -168,8 +177,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       }
 
       this.db.exec({
-        sql: 'INSERT INTO notes(uuid, text, category, category_id, tags, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
-        bind: [uuid, note.text, note.category, categoryId, tagsJson, now],
+        sql: 'INSERT INTO notes(uuid, text, category, category_id, tags, is_pinned, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        bind: [uuid, note.text, note.category, categoryId, tagsJson, note.isPinned ? 1 : 0, now],
       });
 
       rowId = this.db.selectValue('SELECT last_insert_rowid()');
@@ -189,6 +198,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       text: note.text,
       category: note.category,
       tags: note.tags || [],
+      isPinned: !!note.isPinned,
       createdAt: new Date(),
       updatedAt: new Date(now),
     };
@@ -212,16 +222,16 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
 
     // 2. Update Note
     this.db.exec({
-      sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, updated_at = ? WHERE rowid = ?`,
-      bind: [note.text, note.category, categoryId, tagsJson, now, note.id]
+      sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, is_pinned = ?, updated_at = ? WHERE rowid = ?`,
+      bind: [note.text, note.category, categoryId, tagsJson, note.isPinned ? 1 : 0, now, note.id]
     });
   }
 
-  async findAll(limit: number = 20, offset: number = 0, category?: string, tag?: string): Promise<Note[]> {
+  async findAll(limit: number = 20, offset: number = 0, category?: string, tag?: string, pinned?: boolean): Promise<Note[]> {
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
 
-    let sql = 'SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes';
+    let sql = 'SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at FROM notes';
     const conditions: string[] = [];
     const bind: any[] = [];
 
@@ -237,10 +247,17 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       bind.push(`%"${tag}"%`);
     }
 
+    if (pinned !== undefined) {
+      conditions.push('is_pinned = ?');
+      bind.push(pinned ? 1 : 0);
+    }
+
     if (conditions.length > 0) {
       sql += ' WHERE ' + conditions.join(' AND ');
     }
 
+    // If pinned, we might want to sort by updated_at or something? 
+    // Usually pinned notes are manual sort or created_at desc. using created_at desc for now.
     sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     bind.push(limit, offset);
 
@@ -260,6 +277,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
           text: row.text,
           category: row.category,
           tags,
+          isPinned: !!row.is_pinned,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
         });
@@ -273,7 +291,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
   async exportAll(): Promise<Note[]> {
     if (!this.db) throw new Error('Database not initialized');
     const results: Note[] = [];
-    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, tags, created_at, updated_at FROM notes ORDER BY created_at DESC');
+    const stmt = this.db.prepare('SELECT rowid as id, uuid, text, category, tags, is_pinned, created_at, updated_at FROM notes ORDER BY created_at DESC');
     try {
       while (stmt.step()) {
         const row = stmt.get({}) as any;
@@ -288,6 +306,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
           text: row.text,
           category: row.category,
           tags,
+          isPinned: !!row.is_pinned,
           createdAt: new Date(row.created_at),
           updatedAt: new Date(row.updated_at),
         });
@@ -340,7 +359,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
           uuid: importedNote.uuid,
           text: importedNote.text,
           category: importedNote.category,
-          tags: importedNote.tags
+          tags: importedNote.tags,
+          isPinned: importedNote.isPinned
         }, embedding);
 
         this.db.exec({
@@ -364,8 +384,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
             }
 
             this.db.exec({
-              sql: 'UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, updated_at = ? WHERE uuid = ?',
-              bind: [importedNote.text, importedNote.category, categoryId, JSON.stringify(importedNote.tags || []), importedNote.updatedAt, importedNote.uuid]
+              sql: 'UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, is_pinned = ?, updated_at = ? WHERE uuid = ?',
+              bind: [importedNote.text, importedNote.category, categoryId, JSON.stringify(importedNote.tags || []), importedNote.isPinned ? 1 : 0, importedNote.updatedAt, importedNote.uuid]
             });
           });
 
@@ -399,6 +419,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
         notes.text, 
         notes.category, 
         notes.tags,
+        notes.is_pinned,
         notes.created_at,
         notes.updated_at,
         vec_distance_L2(vec_notes.embedding, ?) as distance 
@@ -425,6 +446,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
             text: row.text,
             category: row.category,
             tags,
+            isPinned: !!row.is_pinned,
             createdAt: new Date(row.created_at),
             updatedAt: new Date(row.updated_at),
             distance: row.distance,

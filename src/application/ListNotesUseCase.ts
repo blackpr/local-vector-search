@@ -8,7 +8,7 @@ export class ListNotesUseCase {
     this.noteRepository = noteRepository;
   }
 
-  async execute(limit: number = 20, offset: number = 0, category?: string, tag?: string): Promise<Note[]> {
-    return this.noteRepository.findAll(limit, offset, category, tag);
+  async execute(limit: number = 20, offset: number = 0, category?: string, tag?: string, pinned?: boolean): Promise<Note[]> {
+    return this.noteRepository.findAll(limit, offset, category, tag, pinned);
   }
 }

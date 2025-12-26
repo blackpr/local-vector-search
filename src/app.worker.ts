@@ -14,7 +14,7 @@ export type WorkerMessage =
   | { type: 'INIT' }
   | { type: 'ADD_NOTE'; payload: { text: string; category: string; tags: string[] } }
   | { type: 'SEARCH'; payload: { query: string; limit?: number; offset?: number } }
-  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string; tag?: string } }
+  | { type: 'LIST_NOTES'; payload?: { limit: number; offset: number; category?: string; tag?: string; pinned?: boolean } }
   | { type: 'DELETE_NOTE'; payload: number }
   | { type: 'UPDATE_NOTE'; payload: any }
   | { type: 'LIST_CATEGORIES' }
@@ -31,7 +31,7 @@ export type WorkerMessage =
 export type WorkerResponse =
   | { type: 'READY' }
   | { type: 'NOTE_ADDED'; text: string }
-  | { type: 'NOTE_UPDATED' }
+  | { type: 'NOTE_UPDATED'; payload?: any }
   | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }
   | { type: 'NOTES_LISTED'; results: Array<{ id: number; text: string; category: string; created_at: string }> }
   | { type: 'NOTE_DELETED'; id: number }
@@ -128,7 +128,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     } else if (type === 'LIST_NOTES') {
       if (!listNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload || {};
-      const results = await listNotesUseCase.execute(payload.limit, payload.offset, payload.category, payload.tag);
+      const results = await listNotesUseCase.execute(payload.limit, payload.offset, payload.category, payload.tag, payload.pinned);
       const mappedResults = results.map(r => ({
         ...r,
         created_at: r.createdAt
@@ -175,7 +175,7 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
       if (!noteRepository) throw new Error('Not initialized');
       const note = (e.data as any).payload;
       await noteRepository.update(note);
-      self.postMessage({ type: 'NOTE_UPDATED' });
+      self.postMessage({ type: 'NOTE_UPDATED', payload: note });
     } else if (type === 'LIST_CATEGORIES') {
       if (!manageCategoriesUseCase) throw new Error('Not initialized');
       const results = await manageCategoriesUseCase.list();

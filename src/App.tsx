@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useWorker } from './hooks/useWorker';
-import { Search, Plus, Brain, List, RefreshCw, Folder, Sparkles } from 'lucide-react';
+import { Search, Plus, Brain, List, RefreshCw, Folder, Sparkles, Pin } from 'lucide-react';
 import clsx from 'clsx';
 import { NoteList } from './presentation/components/NoteList';
 import { AddNoteForm } from './presentation/components/AddNoteForm';
@@ -13,7 +13,7 @@ import { CategoryManager } from './presentation/components/CategoryManager';
 function App() {
     const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
     const [query, setQuery] = useState('');
-    const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list'>('search');
+    const [activeTab, setActiveTab] = useState<'search' | 'add' | 'list' | 'pinned'>('search');
     const [showSyncModal, setShowSyncModal] = useState(false);
     const [isUrlInitialized, setIsUrlInitialized] = useState(false);
 
@@ -47,6 +47,8 @@ function App() {
         if (activeTab === 'list' && !isIndexing) {
             // Fetch notes using current offset (which might be from URL)
             listNotes(LIMIT, offset, filterCategory || undefined, filterTag || undefined);
+        } else if (activeTab === 'pinned' && !isIndexing) {
+            listNotes(LIMIT, offset, undefined, undefined, true);
         }
         // Load categories on start
         listCategories();
@@ -62,7 +64,7 @@ function App() {
             const cat = params.get('cat');
             const tag = params.get('tag');
 
-            if (tab && ['search', 'add', 'list'].includes(tab)) {
+            if (tab && ['search', 'add', 'list', 'pinned'].includes(tab)) {
                 setActiveTab(tab as any);
             }
             if (q) {
@@ -149,6 +151,10 @@ function App() {
         setFilterCategory(null); // Clear category when selecting tag to avoid intersection for now
         setOffset(0); // Reset pagination
         setActiveTab('list');
+    };
+
+    const handlePin = (note: any) => {
+        updateNote(note.id, note.text, note.category, note.tags, !note.isPinned);
     };
 
     const handleExport = async () => {
@@ -439,7 +445,16 @@ function App() {
                                 activeTab === 'list' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
                             )}
                         >
-                            <List className="w-4 h-4" /> All Notes
+                            <List className="w-4 h-4" /> All
+                        </button>
+                        <button
+                            onClick={() => { setActiveTab('pinned'); setOffset(0); }}
+                            className={clsx(
+                                "flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg text-sm font-medium transition-all",
+                                activeTab === 'pinned' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
+                            )}
+                        >
+                            <Pin className="w-4 h-4" /> Pinned
                         </button>
                         <button
                             onClick={() => { setActiveTab('add'); setOffset(0); }}
@@ -448,7 +463,7 @@ function App() {
                                 activeTab === 'add' ? "bg-zinc-800 text-white shadow-sm" : "text-zinc-400 hover:text-zinc-200"
                             )}
                         >
-                            <Plus className="w-4 h-4" /> Add Note
+                            <Plus className="w-4 h-4" /> Add
                         </button>
                     </div>
 
@@ -457,8 +472,6 @@ function App() {
                             {error || 'An error occurred'}
                         </div>
                     )}
-
-
 
                     {activeTab === 'search' && (
                         <div className="space-y-4">
@@ -499,6 +512,7 @@ function App() {
                                             setFilterCategory(null);
                                             setActiveTab('list');
                                         }}
+                                        onPin={handlePin}
                                         onLoadMore={searchResults.length === LIMIT ? handleLoadMore : undefined}
                                         hasMore={searchResults.length === LIMIT}
                                     />
@@ -538,6 +552,35 @@ function App() {
                                 onNoteClick={setSelectedNote}
                                 onCategoryClick={handleCategoryClick}
                                 onTagClick={handleTagClick}
+                                onPin={handlePin}
+                                onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
+                                hasMore={allNotes.length === LIMIT}
+                            />
+                        </div>
+                    )}
+
+                    {activeTab === 'pinned' && (
+                        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="flex justify-between items-center px-2">
+                                <h2 className="text-xl font-semibold text-zinc-200">
+                                    {offset > 0 ? `Pinned Notes (Page ${offset / LIMIT + 1})` : 'Pinned Notes'}
+                                </h2>
+                                {offset > 0 && (
+                                    <button
+                                        onClick={() => { setOffset(0); listNotes(LIMIT, 0, undefined, undefined, true); }}
+                                        className="text-xs text-indigo-400 hover:text-indigo-300"
+                                    >
+                                        Back to Start
+                                    </button>
+                                )}
+                            </div>
+                            <NoteList
+                                notes={allNotes.filter(n => n.isPinned)}
+                                onDelete={deleteNote}
+                                onNoteClick={setSelectedNote}
+                                onCategoryClick={handleCategoryClick}
+                                onTagClick={handleTagClick}
+                                onPin={handlePin}
                                 onLoadMore={allNotes.length === LIMIT ? handleLoadMore : undefined}
                                 hasMore={allNotes.length === LIMIT}
                             />
