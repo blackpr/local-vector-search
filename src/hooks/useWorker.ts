@@ -9,6 +9,7 @@ export function useWorker() {
   const [allNotes, setAllNotes] = useState<Array<{ id: number; text: string; category: string; created_at: string; isPinned?: boolean }>>([]);
   const [categories, setCategories] = useState<Array<{ id: number; name: string }>>([]);
   const [isIndexing, setIsIndexing] = useState(false);
+  const [storageMode, setStorageMode] = useState<'opfs' | 'memory' | null>(null);
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
 
   useEffect(() => {
@@ -24,7 +25,8 @@ export function useWorker() {
       worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
         const { type } = e.data;
 
-        if (type === 'READY') {
+        if (e.data.type === 'READY') {
+          setStorageMode(e.data.storage);
           setStatus('ready');
           setProgress(null);
         } else if (type === 'NOTE_ADDED') {
@@ -242,5 +244,5 @@ export function useWorker() {
     });
   }, []);
 
-  return { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
+  return { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
 }

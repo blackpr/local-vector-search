@@ -1,8 +1,10 @@
 // @ts-ignore
 import initSQLite from '../vendor/sqlite3.mjs';
 
+export type StorageMode = 'opfs' | 'memory';
+
 export class DatabaseFactory {
-  static async createDatabase(): Promise<any> {
+  static async createDatabase(): Promise<{ db: any; storage: StorageMode }> {
     try {
       const sqlite3 = await initSQLite({
         print: console.log,
@@ -10,6 +12,7 @@ export class DatabaseFactory {
       });
 
       let db: any;
+      let storage: StorageMode = 'opfs';
 
       // Robust OPFS check
       const isSecure = typeof self !== 'undefined' && self.crossOriginIsolated;
@@ -27,10 +30,11 @@ export class DatabaseFactory {
       } catch (opfsError) {
         console.warn('OPFS init failed/unavailable, falling back to memory:', opfsError);
         db = new sqlite3.oo1.DB(':memory:');
+        storage = 'memory';
         console.log('Using in-memory storage');
       }
 
-      return db;
+      return { db, storage };
     } catch (criticalError) {
       console.error("Critical SQLite Init Error:", criticalError);
       throw criticalError;

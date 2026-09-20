@@ -1,27 +1,33 @@
-const r = "vector-search-model-cache-v1", i = [
-  // Patterns to match huggingface model requests
-  "https://huggingface.co/",
-  "https://cdn-lfs.huggingface.co/"
-];
-self.addEventListener("install", (e) => {
+const c = "latent-app-v1", s = ["https://cdn.jsdelivr.net"];
+function o(e, t) {
+  return e.origin === t ? !0 : s.includes(e.origin);
+}
+const l = "vector-search-model-cache-v1";
+self.addEventListener("install", () => {
   self.skipWaiting();
 });
 self.addEventListener("activate", (e) => {
-  e.waitUntil(self.clients.claim());
+  e.waitUntil(
+    (async () => {
+      await caches.delete(l), await self.clients.claim();
+    })()
+  );
 });
 self.addEventListener("fetch", (e) => {
-  const n = new URL(e.request.url);
-  i.some((s) => n.href.includes(s)) && e.respondWith(
-    caches.open(r).then(async (s) => {
-      const c = await s.match(e.request);
-      if (c)
-        return c;
+  const t = e.request;
+  if (t.method !== "GET") return;
+  const r = new URL(t.url);
+  r.protocol.startsWith("http") && o(r, self.location.origin) && e.respondWith(
+    (async () => {
+      const i = await caches.open(c);
       try {
-        const t = await fetch(e.request);
-        return t.ok && s.put(e.request, t.clone()), t;
-      } catch (t) {
-        throw console.error("Fetch failed:", t), t;
+        const n = await fetch(t);
+        return n.ok && i.put(t, n.clone()), n;
+      } catch (n) {
+        const a = await i.match(t, { ignoreVary: !0 }) || (t.mode === "navigate" ? await i.match(new URL("/", self.location.origin).href) : void 0);
+        if (a) return a;
+        throw n;
       }
-    })
+    })()
   );
 });

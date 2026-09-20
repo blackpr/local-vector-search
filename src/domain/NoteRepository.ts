@@ -4,7 +4,15 @@ export interface NoteRepository {
   save(note: NewNote, embedding?: Float32Array): Promise<Note>;
   delete(id: number): Promise<void>;
   restore(id: number): Promise<void>;
-  update(note: Note): Promise<void>;
+  /**
+   * Updates a note. When `embedding` is given, the text row and the vector row
+   * are replaced in one transaction so they can never describe different text.
+   */
+  update(note: Note, embedding?: Float32Array): Promise<void>;
+  getEmbeddingVersion(): Promise<string | null>;
+  setEmbeddingVersion(version: string): Promise<void>;
+  listAllForReindex(): Promise<Array<{ id: number; text: string }>>;
+  replaceEmbedding(id: number, embedding: Float32Array): Promise<void>;
   findAll(limit?: number, offset?: number, category?: string, tag?: string, pinned?: boolean): Promise<Note[]>;
   exportAll(): Promise<Note[]>;
   merge(importedNotes: Note[], embeddingService: { generateEmbedding: (text: string) => Promise<Float32Array> }): Promise<{ imported: number; updated: number }>;

@@ -17,6 +17,10 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       CREATE VIRTUAL TABLE IF NOT EXISTS vec_notes USING vec0(
         embedding float[768]
       );
+      CREATE TABLE IF NOT EXISTS meta(
+        key TEXT PRIMARY KEY,
+        value TEXT
+      );
       CREATE TABLE IF NOT EXISTS categories(
         id INTEGER PRIMARY KEY,
         name TEXT UNIQUE NOT NULL
@@ -219,27 +223,72 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     };
   }
 
-  async update(note: Note): Promise<void> {
+  async update(note: Note, embedding?: Float32Array): Promise<void> {
     if (!this.db) throw new Error('Database not initialized');
     const now = new Date().toISOString();
     const tagsJson = JSON.stringify(note.tags || []);
 
-    // 1. Ensure Category exists
-    let categoryId: number | null = null;
-    if (note.category) {
-      this.db.exec({
-        sql: 'INSERT OR IGNORE INTO categories(name) VALUES (?)',
-        bind: [note.category]
-      });
-      const catResult = this.db.selectObject('SELECT id FROM categories WHERE name = ?', [note.category]);
-      categoryId = catResult ? catResult.id : null;
-    }
+    // Text row and vector row change together or not at all.
+    this.db.transaction(() => {
+      // 1. Ensure Category exists
+      let categoryId: number | null = null;
+      if (note.category) {
+        this.db.exec({
+          sql: 'INSERT OR IGNORE INTO categories(name) VALUES (?)',
+          bind: [note.category]
+        });
+        const catResult = this.db.selectObject('SELECT id FROM categories WHERE name = ?', [note.category]);
+        categoryId = catResult ? catResult.id : null;
+      }
 
-    // 2. Update Note
-    this.db.exec({
-      sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, is_pinned = ?, updated_at = ? WHERE rowid = ?`,
-      bind: [note.text, note.category, categoryId, tagsJson, note.isPinned ? 1 : 0, now, note.id]
+      // 2. Update Note
+      this.db.exec({
+        sql: `UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, is_pinned = ?, updated_at = ? WHERE rowid = ?`,
+        bind: [note.text, note.category, categoryId, tagsJson, note.isPinned ? 1 : 0, now, note.id]
+      });
+
+      // 3. Replace the vector when the text changed
+      if (embedding) {
+        this.writeEmbedding(note.id, embedding);
+      }
     });
+  }
+
+  async replaceEmbedding(id: number, embedding: Float32Array): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.transaction(() => this.writeEmbedding(id, embedding));
+  }
+
+  async listAllForReindex(): Promise<Array<{ id: number; text: string }>> {
+    if (!this.db) throw new Error('Database not initialized');
+    // Soft-deleted notes keep their vectors (they can be restored), so include them.
+    return this.db.selectObjects('SELECT rowid as id, text FROM notes ORDER BY rowid') as Array<{ id: number; text: string }>;
+  }
+
+  async getEmbeddingVersion(): Promise<string | null> {
+    if (!this.db) throw new Error('Database not initialized');
+    const value = this.db.selectValue("SELECT value FROM meta WHERE key = 'embedding_version'");
+    return value ?? null;
+  }
+
+  async setEmbeddingVersion(version: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.exec({
+      sql: "INSERT INTO meta(key, value) VALUES ('embedding_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      bind: [version],
+    });
+  }
+
+  /** vec0 has no UPSERT, so replace = delete + insert. Call inside a transaction. */
+  private writeEmbedding(rowId: number, embedding: Float32Array): void {
+    this.db.exec({ sql: 'DELETE FROM vec_notes WHERE rowid = ?', bind: [rowId] });
+    const stmt = this.db.prepare('INSERT INTO vec_notes(rowid, embedding) VALUES (?, ?)');
+    try {
+      stmt.bind([rowId, this.toSqliteBlob(embedding)]);
+      stmt.step();
+    } finally {
+      stmt.finalize();
+    }
   }
 
   async findAll(limit: number = 20, offset: number = 0, category?: string, tag?: string, pinned?: boolean): Promise<Note[]> {
@@ -391,6 +440,9 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
 
         if (remoteUpdated > localUpdated) {
           const needsEmbeddingUpdate = existing.text !== importedNote.text;
+          const newEmbedding = needsEmbeddingUpdate
+            ? await embeddingService.generateEmbedding(importedNote.text)
+            : undefined;
 
           this.db.transaction(() => {
             let categoryId: number | null = null;
@@ -404,20 +456,11 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
               sql: 'UPDATE notes SET text = ?, category = ?, category_id = ?, tags = ?, is_pinned = ?, updated_at = ? WHERE uuid = ?',
               bind: [importedNote.text, importedNote.category, categoryId, JSON.stringify(importedNote.tags || []), importedNote.isPinned ? 1 : 0, importedNote.updatedAt, importedNote.uuid]
             });
-          });
 
-          if (needsEmbeddingUpdate) {
-            const embedding = await embeddingService.generateEmbedding(importedNote.text);
-            const rowId = existing.rowid;
-            this.db.exec('DELETE FROM vec_notes WHERE rowid = ?', [rowId]);
-            const stmt = this.db.prepare('INSERT INTO vec_notes(rowid, embedding) VALUES (?, ?)');
-            try {
-              stmt.bind([rowId, this.toSqliteBlob(embedding)]);
-              stmt.step();
-            } finally {
-              stmt.finalize();
+            if (newEmbedding) {
+              this.writeEmbedding(existing.rowid, newEmbedding);
             }
-          }
+          });
           updatedCount++;
         }
       }

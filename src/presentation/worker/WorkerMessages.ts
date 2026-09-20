@@ -18,7 +18,7 @@ export type WorkerMessage =
   | { type: 'GET_NOTE'; payload: number };
 
 export type WorkerResponse =
-  | { type: 'READY' }
+  | { type: 'READY'; storage: 'opfs' | 'memory' }
   | { type: 'NOTE_ADDED'; text: string }
   | { type: 'NOTE_UPDATED'; payload?: any }
   | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }

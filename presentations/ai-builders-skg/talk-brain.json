@@ -1,0 +1,398 @@
+[
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000001",
+    "text": "Transformers.js is Hugging Face's JavaScript library for running machine learning models in the browser or Node. Same pipeline() API as the Python version. It downloads a model from the Hugging Face hub and runs it locally with ONNX Runtime Web. In Latent the whole AI integration is about 25 lines: pipeline('feature-extraction', model).",
+    "category": "stack",
+    "tags": [
+      "transformersjs",
+      "huggingface"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000002",
+    "text": "Why not TensorFlow.js? TensorFlow.js is Google's framework for training and running TensorFlow models in JavaScript, with its own model format. Latent does not use it. The models I wanted (EmbeddingGemma, Flan-T5) are already published on Hugging Face as ONNX files that Transformers.js runs out of the box. With TensorFlow.js I would have to convert them myself. TF.js is a framework; Transformers.js is a model runner with a huge shelf of ready models. I wanted the shelf.",
+    "category": "stack",
+    "tags": [
+      "tensorflowjs",
+      "transformersjs"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000003",
+    "text": "ONNX is an open file format for neural networks, the PDF of models. Train in PyTorch, export to ONNX, run anywhere. ONNX Runtime Web is Microsoft's engine that executes ONNX files inside a browser, either on the CPU through WebAssembly or on the GPU through WebGPU.",
+    "category": "stack",
+    "tags": [
+      "onnx"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000004",
+    "text": "WebGPU vs WebAssembly. WebAssembly (WASM) is a binary format that lets C, C++ or Rust code run in the browser at near native speed, on the CPU. It works everywhere. WebGPU is the modern browser API for the graphics card, built for compute as well as graphics, and it makes model inference much faster. Latent uses device: 'auto': WebGPU when the browser has it, WASM as the fallback. Browser support for WebGPU is still uneven, Chrome and Edge are the safest.",
+    "category": "stack",
+    "tags": [
+      "webgpu",
+      "wasm"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000005",
+    "text": "Which model does the search use? EmbeddingGemma is Google's small open embedding model, about 300 million parameters, designed to run on-device. It turns text into a vector of 768 numbers. It is multilingual, over 100 languages including Greek, which matters because my notes mix Greek and English. I use the ONNX build from onnx-community on Hugging Face.",
+    "category": "stack",
+    "tags": [
+      "embeddinggemma",
+      "model"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000006",
+    "text": "What is an embedding? Coordinates for meaning. A model reads a piece of text and outputs a list of numbers, 768 in our case. Texts that mean similar things land close together in that space, even if they share no words. Semantic search is: embed the query, find the stored notes whose vectors are nearest.",
+    "category": "stack",
+    "tags": [
+      "embedding",
+      "vector"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000007",
+    "text": "EmbeddingGemma needs task prefixes. A search query is embedded as \"task: search result | query: ...\" and a stored note as \"title: none | text: ...\". The model was trained this way. If you forget the prefixes nothing crashes, the results just get quietly worse. We also use mean pooling (average the per-token vectors into one) and normalize the result to length 1.",
+    "category": "stack",
+    "tags": [
+      "embeddinggemma",
+      "prompt"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000008",
+    "text": "Auto-tagging uses a second model, LaMini-Flan-T5-77M: a tiny instruction-following text-to-text model with 77 million parameters. The prompt is literally \"Extract keywords: <note>\" and I split the output on commas. Manual #hashtags are pulled out with a regex and merged in. The model is mostly English-trained, so Greek tags are weak.",
+    "category": "stack",
+    "tags": [
+      "tagging",
+      "flan-t5"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000009",
+    "text": "SQLite WASM is the real SQLite C code compiled to WebAssembly, officially supported by the SQLite team. A full SQL database inside the browser tab: joins, indexes, transactions. The engine is a single 5.9 MB file. The whole database is one file, so backup means download the file. My build is vendored because it has the sqlite-vec extension compiled in.",
+    "category": "stack",
+    "tags": [
+      "sqlite",
+      "wasm"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000010",
+    "text": "Why not IndexedDB or localStorage? IndexedDB is a key-value store with a clumsy async API: no SQL, no joins, no vector functions. localStorage is tiny and synchronous. I wanted notes and vectors in one place with one query language, so SQLite. PGlite (Postgres in WASM with pgvector) would also work; SQLite is smaller and simpler.",
+    "category": "stack",
+    "tags": [
+      "indexeddb",
+      "sqlite"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000011",
+    "text": "Where is the data stored? In OPFS, the Origin Private File System, is a private sandboxed disk that the browser gives each website. It is not visible in Finder and not shared between sites. It supports fast synchronous file access from inside a worker, which is what SQLite needs. Latent stores everything in one file there: /notes.db. The browser may evict it under storage pressure unless you call navigator.storage.persist(), so there is an export button.",
+    "category": "stack",
+    "tags": [
+      "opfs",
+      "storage"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000012",
+    "text": "Why does the app need special HTTP headers? SQLite's OPFS driver uses SharedArrayBuffer to bridge its blocking C file I/O to the browser's async APIs. After the Spectre attacks, browsers only allow SharedArrayBuffer on cross-origin isolated pages. That requires two response headers: Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp. They are set in vite.config.ts for dev and vercel.json for production.",
+    "category": "stack",
+    "tags": [
+      "sharedarraybuffer",
+      "coop",
+      "coep",
+      "headers"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000013",
+    "text": "coi-serviceworker is a hack for static hosts like GitHub Pages that cannot send custom headers. A small service worker intercepts the page's own responses, adds the COOP and COEP headers, and reloads the page once. After that the page counts as cross-origin isolated and SharedArrayBuffer works.",
+    "category": "stack",
+    "tags": [
+      "coi-serviceworker",
+      "github-pages"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000014",
+    "text": "sqlite-vec is Alex Garcia's SQLite extension for vector search. Pure C, no dependencies, runs anywhere SQLite runs, including WASM. It adds vec0 virtual tables and distance functions like vec_distance_L2. In Latent, semantic search is a plain SELECT: join notes with their vectors, compute distance to the query vector, ORDER BY distance. It is brute force, it compares against every note, which is fine for a personal notes app.",
+    "category": "stack",
+    "tags": [
+      "sqlite-vec",
+      "vector-search"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000015",
+    "text": "How is the match percentage calculated? Search uses L2 (Euclidean) distance between normalized vectors and keeps results with distance below 1.0. For normalized vectors distance squared equals 2 minus 2 times cosine similarity, so the cutoff means cosine above 0.5. The \"87% match\" badge in the UI is just (1 - distance) * 100. It looks like confidence. It is not a probability, I made it up.",
+    "category": "stack",
+    "tags": [
+      "distance",
+      "score"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000016",
+    "text": "Why a Web Worker? A web worker is a background thread for the page. The models and SQLite run there, so the UI thread never freezes while a 300M parameter model is thinking. React talks to it with typed postMessage calls. The worker is also the composition root where every use case gets wired up.",
+    "category": "stack",
+    "tags": [
+      "web-worker",
+      "performance"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000017",
+    "text": "The service worker is a programmable network proxy that sits between the page and the internet and survives closing the tab. Mine caches the app shell: the HTML, JavaScript, sqlite3.wasm and the ONNX runtime, network first with the cache as fallback. The model files are cached separately by Transformers.js itself. It has nothing to do with the web worker: same word, different job.",
+    "category": "stack",
+    "tags": [
+      "service-worker",
+      "cache"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000018",
+    "text": "Architecture: four layers, Domain-Driven Design style. domain has entities and interfaces with zero imports. application has use cases like AddNote and SearchNotes. infrastructure has the real implementations, SQLite and Transformers.js. presentation is React. Dependency injection is done by hand in app.worker.ts, no container, zero bundle cost. Is it overkill for a side project? Yes. Swapping the model touches one file though.",
+    "category": "stack",
+    "tags": [
+      "architecture",
+      "ddd"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000019",
+    "text": "Sync between devices has no server. Export notes as JSON, import on the other device. Notes are matched by UUID and the newer updated_at wins (last write wins). Import recomputes embeddings locally. It can lose one side of a truly concurrent edit, which is fine for one person with two laptops.",
+    "category": "stack",
+    "tags": [
+      "sync"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000020",
+    "text": "Why no backend and no OpenAI API? Privacy: notes and search queries never leave the device. Cost: no per-token bill and no API key to leak in frontend code. Offline: it works on a plane. The only network traffic is loading the app files and a one-time model download from Hugging Face.",
+    "category": "stack",
+    "tags": [
+      "privacy",
+      "local-first"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000021",
+    "text": "Why not a vector database like Pinecone, Qdrant, Chroma or pgvector? Those are servers. The whole point of Latent is that there is no server. sqlite-vec gives me vector search inside the same SQLite file that holds the notes.",
+    "category": "stack",
+    "tags": [
+      "vector-database"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000022",
+    "text": "How many notes can it handle? I have not measured it. Search is brute force over 768-float vectors, which is cheap, so I would guess tens of thousands of notes are fine on a laptop. Beyond that you would want the vec0 KNN query form, smaller vectors (EmbeddingGemma supports truncating to 256 dimensions), or an approximate index.",
+    "category": "stack",
+    "tags": [
+      "scale",
+      "performance"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000023",
+    "text": "Where is the agent? There is none yet. Latent is the retrieval tool an agent would call: search_notes(query) returning note text and an ID. Wrapped as an MCP server it becomes private long-term memory for an agent. Careful: if the agent's LLM is remote, sending it the retrieved notes moves the privacy boundary.",
+    "category": "stack",
+    "tags": [
+      "agents",
+      "mcp"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000024",
+    "text": "Who is Xenova? Xenova is the Hugging Face username of Joshua Lochner, the person who created Transformers.js. Models have to be converted to the ONNX format before they can run in a browser, and his account hosts hundreds of ready conversions. Xenova/LaMini-Flan-T5-77M is his browser-ready copy of the LaMini-Flan-T5 model, originally made by the MBZUAI research lab. Newer conversions live under the onnx-community account, which is where our EmbeddingGemma comes from.",
+    "category": "stack",
+    "tags": [
+      "xenova",
+      "huggingface",
+      "onnx"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000025",
+    "text": "What is dtype and what is quantization? A model is a big file of numbers called weights, 300 million of them for EmbeddingGemma. dtype is how many bits each number gets. fp32 is 32 bits per weight, so 300 million times 4 bytes is 1.2 GB. q8 rounds every weight to 8 bits, q4 to 4 bits, so the file shrinks to a quarter or less. That rounding is called quantization. It is like JPEG quality or MP3 bitrate: a smaller file, slightly less exact, and usually you cannot tell the difference.",
+    "category": "stack",
+    "tags": [
+      "dtype",
+      "quantization"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000026",
+    "text": "What happens when I edit a note? The vector is derived data, so it has to follow the text. Early versions updated the text and kept the old vector: edit a pasta recipe into a note about API retries and search still thought it was pasta. Now an edit re-embeds the note first, then writes text and vector in one transaction. The database also records which model and precision produced the vectors and re-embeds everything once if that changes.",
+    "category": "lessons",
+    "tags": [
+      "embedding",
+      "consistency"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000027",
+    "text": "How big is the download? About 300 MB on the first visit, measured 317 MB: EmbeddingGemma with 4-bit weights (q4, 197 MB) plus the tagging model in 8-bit (95 MB). It used to be 1.6 GB because I loaded fp32 weights, thinking SQLite needed float32. It does, but dtype is the precision of the downloaded weights; the output vector is float32 either way. Same search results on my test set, one fifth of the download.",
+    "category": "lessons",
+    "tags": [
+      "download-size",
+      "quantization"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000028",
+    "text": "Can I lose my notes? They live in the browser's private file system, so clearing site data deletes them; that is what the export button is for. The app asks the browser for persistent storage so they are not evicted. If OPFS is not available at all, SQLite falls back to memory and the app now shows a loud warning instead of pretending everything is saved.",
+    "category": "lessons",
+    "tags": [
+      "storage",
+      "opfs"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000029",
+    "text": "Does it work offline? Yes. After one online visit the app cold-starts with no network at all. Offline is really three promises: search in an open tab (the model is in memory), notes that survive a restart (OPFS), and launching cold (the service worker serves the app shell, Transformers.js serves the models from its cache). I tested it by killing the server and cutting the network.",
+    "category": "lessons",
+    "tags": [
+      "offline",
+      "service-worker"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000030",
+    "text": "Μετά το meetup: μπουγάτσα με κρέμα, ζεστή, με μπόλικη άχνη ζάχαρη και κανέλα. Τα καλά μαγαζιά στη Θεσσαλονίκη ανοίγουν πριν ξημερώσει.",
+    "category": "skg",
+    "tags": [
+      "φαγητό",
+      "μπουγάτσα"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000031",
+    "text": "Why is it called Latent? Latent means hidden. An embedding model maps text into a hidden space of meaning, the latent space, and search is finding the nearest points in it. It is also where my notes usually live: hidden, until something surfaces them.",
+    "category": "skg",
+    "tags": [
+      "name",
+      "latent"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000032",
+    "text": "Latent is released under the beerware license. If you find it useful and we meet some day, you can buy me a beer in return.",
+    "category": "skg",
+    "tags": [
+      "license",
+      "beer"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000033",
+    "text": "Want to give a talk at AI Builders SKG? If you built something with AI, show it. 15 to 20 minutes, real system over slides, bugs welcome. Any stack, any domain. Find Vangelis after the talks.",
+    "category": "skg",
+    "tags": [
+      "meetup",
+      "speakers"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  }
+]

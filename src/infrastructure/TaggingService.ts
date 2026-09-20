@@ -4,6 +4,11 @@ import { type TaggingSystem } from '../domain/TaggingSystem';
 
 const MODEL_ID = 'Xenova/LaMini-Flan-T5-77M';
 
+// fp32 ≈ 374 MB, q8 ≈ 95 MB. A 77M-parameter model is quick on the CPU, and
+// wasm + q8 is the combination Transformers.js itself defaults to.
+/** Approximate download size, used for the progress bar. */
+export const TAGGING_MODEL_BYTES = 95 * 1024 * 1024;
+
 export class TaggingService implements TaggingSystem {
   private generator: TextGenerationPipeline | null = null;
   private trace: string[] = [];
@@ -23,8 +28,8 @@ export class TaggingService implements TaggingSystem {
     try {
       // @ts-ignore
       this.generator = await pipeline('text2text-generation', MODEL_ID, {
-        device: 'auto',
-        dtype: 'fp32',
+        device: 'wasm',
+        dtype: 'q8',
         progress_callback: (data: any) => {
           if (this.onProgress) {
             this.onProgress(data);

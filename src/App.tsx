@@ -13,7 +13,7 @@ import { NoteListView } from './presentation/views/NoteListView';
 import { AddNoteView } from './presentation/views/AddNoteView';
 
 function App() {
-    const { status, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
+    const { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
 
     // UI State
     const [query, setQuery] = useState('');
@@ -251,6 +251,14 @@ function App() {
                 setActiveTab={setActiveTab}
                 setOffset={setOffset}
             />
+
+            {storageMode === 'memory' && (
+                <div role="alert" className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-sm my-4">
+                    <strong className="font-semibold">Your notes are not being saved.</strong>{' '}
+                    This browser could not open persistent storage (OPFS), so everything lives in memory and disappears when you close the tab.
+                    Use Sync → Export before you leave.
+                </div>
+            )}
 
             {status === 'error' && (
                 <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-center text-sm my-4">

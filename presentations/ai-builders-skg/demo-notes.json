@@ -1,0 +1,94 @@
+[
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000001",
+    "text": "Pasta with garlic, olive oil and tomatoes takes about fifteen minutes. Add the tomatoes near the end and finish with basil.",
+    "category": "Food",
+    "tags": [
+      "pasta",
+      "cooking"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000002",
+    "text": "When an API returns HTTP 429, retry with exponential backoff and random jitter. Respect the Retry-After header when it exists.",
+    "category": "Engineering",
+    "tags": [
+      "api",
+      "retries"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000003",
+    "text": "Keep inference in a Web Worker so the interface can respond while the model computes embeddings.",
+    "category": "Engineering",
+    "tags": [
+      "browser",
+      "workers"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000004",
+    "text": "A JSON export is a simple way to move personal notes between two devices without running a sync server.",
+    "category": "Engineering",
+    "tags": [
+      "backup",
+      "sync"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000005",
+    "text": "For the meetup, offer beer and non-alcoholic drinks when people arrive. Leave room for questions during each demo.",
+    "category": "Meetup",
+    "tags": [
+      "community"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000006",
+    "text": "A walk along the Thessaloniki waterfront is a good way to clear my head after a long day at the laptop.",
+    "category": "Personal",
+    "tags": [
+      "walk"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000007",
+    "text": "Check that a saved note survives closing and reopening the browser. An in-memory database only lasts for its session.",
+    "category": "Engineering",
+    "tags": [
+      "storage"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  },
+  {
+    "uuid": "a1b20000-0000-4000-8000-000000000008",
+    "text": "Coffee with a friend on Saturday afternoon. Bring the book I borrowed last month.",
+    "category": "Personal",
+    "tags": [
+      "reminder"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-09-19T10:00:00.000Z",
+    "updatedAt": "2026-09-19T10:00:00.000Z"
+  }
+]

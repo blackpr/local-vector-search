@@ -55,7 +55,7 @@ export const Header = ({
                     <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
                   </span>
                   <span className="text-amber-400/90">
-                    Loading models... {Math.round(progress.progress)}%
+                    {progress.file === 'reindex' ? 'Re-indexing notes' : 'Loading models'}... {Math.round(progress.progress)}%
                   </span>
                 </span>
               ) : (

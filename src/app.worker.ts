@@ -11,11 +11,13 @@ import { SuggestCategoryUseCase } from './application/SuggestCategoryUseCase';
 import { ExportDataUseCase } from './application/ExportDataUseCase';
 import { ImportDataUseCase } from './application/ImportDataUseCase';
 import { SystemManagementUseCase } from './application/SystemManagementUseCase';
+import { ReindexNotesUseCase } from './application/ReindexNotesUseCase';
 
 import { DatabaseFactory } from './infrastructure/DatabaseFactories';
 import { SqliteNoteRepository } from './infrastructure/SqliteNoteRepository';
-import { TransformersVectorService } from './infrastructure/TransformersVectorService';
-import { TaggingService } from './infrastructure/TaggingService';
+import { TransformersVectorService, VECTOR_MODEL_BYTES } from './infrastructure/TransformersVectorService';
+import { TaggingService, TAGGING_MODEL_BYTES } from './infrastructure/TaggingService';
+import { warmAppCache } from './offline/warmAppCache';
 import { SqliteDatabaseManager } from './infrastructure/SqliteDatabaseManager';
 
 import type { WorkerMessage, WorkerResponse } from './presentation/worker/WorkerMessages';
@@ -48,8 +50,8 @@ async function initialize() {
     const modelProgress = {
       vectorFiles: new Map<string, { loaded: number, total: number }>(),
       taggingFiles: new Map<string, { loaded: number, total: number }>(),
-      vectorEstimate: 1100 * 1024 * 1024, // ~1.1GB for Gemma fp32
-      taggingEstimate: 300 * 1024 * 1024, // ~300MB for LaMini fp32
+      vectorEstimate: VECTOR_MODEL_BYTES,
+      taggingEstimate: TAGGING_MODEL_BYTES,
       vectorDone: false,
       taggingDone: false,
       maxCombined: 0
@@ -127,7 +129,7 @@ async function initialize() {
     });
 
     console.log("Worker: Opening DB...");
-    const db = await DatabaseFactory.createDatabase().catch(err => {
+    const { db, storage } = await DatabaseFactory.createDatabase().catch(err => {
       throw new Error(`DB Failed: ${err.message}`);
     });
     noteRepository = new SqliteNoteRepository(db);
@@ -148,15 +150,28 @@ async function initialize() {
     restoreNoteUseCase = new RestoreNoteUseCase(noteRepository);
     manageCategoriesUseCase = new ManageCategoriesUseCase(noteRepository);
     getNoteUseCase = new GetNoteUseCase(noteRepository);
-    updateNoteUseCase = new UpdateNoteUseCase(noteRepository);
+    updateNoteUseCase = new UpdateNoteUseCase(noteRepository, vectorService);
     generateTagsUseCase = new GenerateTagsUseCase(taggingService);
     suggestCategoryUseCase = new SuggestCategoryUseCase(searchNotesUseCase);
     exportDataUseCase = new ExportDataUseCase(noteRepository);
     importDataUseCase = new ImportDataUseCase(noteRepository, vectorService);
     systemManagementUseCase = new SystemManagementUseCase(databaseManager);
 
+    // Vectors from another model/precision are not comparable: re-embed once.
+    const reindexed = await new ReindexNotesUseCase(noteRepository, vectorService).execute((done, total) => {
+      self.postMessage({
+        type: 'PROGRESS',
+        payload: { status: 'progress', file: 'reindex', progress: (done / total) * 100, loaded: done, total }
+      } as WorkerResponse);
+    });
+    if (reindexed > 0) console.log(`Worker: Re-embedded ${reindexed} notes for ${vectorService.version}`);
+
     console.log('System Ready.');
-    self.postMessage({ type: 'READY' } as WorkerResponse);
+    self.postMessage({ type: 'READY', storage } as WorkerResponse);
+
+    // Everything this worker fetched (its own chunk, sqlite3.wasm, the ONNX
+    // runtime) goes into the app cache so a cold start works offline.
+    void warmAppCache();
   } catch (error) {
     console.error('Initialization error:', error);
     self.postMessage({ type: 'ERROR', error: (error as Error).message } as WorkerResponse);

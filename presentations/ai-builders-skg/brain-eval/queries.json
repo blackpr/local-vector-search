@@ -1,0 +1,150 @@
+[
+[
+"what is tensorflow js and why don't you use it",
+"Why not TensorFlow.js"
+],
+[
+"what is transformers.js",
+"Transformers.js is Hugging"
+],
+[
+"what's onnx",
+"ONNX is an open"
+],
+[
+"does it run on the GPU",
+"WebGPU vs"
+],
+[
+"which model do you use for search",
+"Which model does the search"
+],
+[
+"explain embeddings to my mom",
+"What is an embedding"
+],
+[
+"how do you store the data",
+"OPFS"
+],
+[
+"why sqlite in the browser",
+"SQLite WASM is"
+],
+[
+"why not just use indexeddb",
+"Why not IndexedDB"
+],
+[
+"what are those weird cross origin headers",
+"special HTTP headers"
+],
+[
+"how does it work on github pages",
+"coi-serviceworker"
+],
+[
+"how does the vector search work",
+"sqlite-vec is"
+],
+[
+"what does 87% match mean",
+"match percentage"
+],
+[
+"why doesn't the UI freeze",
+"Why a Web Worker"
+],
+[
+"how are the models cached",
+"service worker is"
+],
+[
+"isn't this architecture overkill",
+"Architecture"
+],
+[
+"how do I sync between my laptop and phone",
+"Sync between"
+],
+[
+"why not call openai",
+"Why no backend"
+],
+[
+"why not pinecone",
+"Why not a vector database"
+],
+[
+"will it work with 100k notes",
+"How many notes"
+],
+[
+"where is the agent in this",
+"Where is the agent"
+],
+[
+"what happens when I edit a note",
+"What happens when I edit"
+],
+[
+"how big is the download",
+"How big is the download"
+],
+[
+"can I lose my notes",
+"Can I lose my notes"
+],
+[
+"does it open without internet",
+"Does it work offline"
+],
+[
+"where do we eat after the beers",
+"μπουγάτσα"
+],
+[
+"I'm hungry and it's 5am",
+"μπουγάτσα"
+],
+[
+"what do I owe you for this",
+"beerware"
+],
+[
+"can I present next time",
+"give a talk"
+],
+[
+"how do tags get generated",
+"Auto-tagging"
+],
+[
+"why is it called latent",
+"Why is it called Latent"
+],
+[
+"why are you using xenova",
+"Who is Xenova"
+],
+[
+"who is xenova",
+"Who is Xenova"
+],
+[
+"what is dtype",
+"What is dtype"
+],
+[
+"what does q4 mean",
+"What is dtype"
+],
+[
+"what is quantization",
+"What is dtype"
+],
+[
+"the weather in london tomorrow",
+"zzz-none"
+]
+]

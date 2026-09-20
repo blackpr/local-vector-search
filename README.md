@@ -9,7 +9,7 @@ A privacy-first, offline-capable semantic search engine running entirely in your
 We've just shipped **33+ major features** transforming this into a production-ready application:
 
 - ✅ **Complete DDD Architecture** - Enterprise-grade code organization
-- ✅ **Dual AI Models** - Semantic search + auto-tagging (377MB total)
+- ✅ **Dual AI Models** - Semantic search + auto-tagging (~300 MB total)
 - ✅ **Soft Delete with Undo** - 10-second recovery window
 - ✅ **URL Synchronization** - Deep linking for all app states
 - ✅ **Manual Sync** - Cross-device synchronization without cloud
@@ -23,7 +23,7 @@ We've just shipped **33+ major features** transforming this into a production-re
 
 ### 🔒 Privacy & Offline-First
 -   **100% Private**: No data ever leaves your device. All AI inference and storage happen locally.
--   **Fully Offline**: Works without internet connection after initial model download (~377MB total).
+-   **Fully Offline**: Works without internet connection after the first visit (~300 MB of models, downloaded once).
 -   **Service Worker Caching**: AI models cached automatically for instant offline access.
 -   **OPFS Storage**: High-performance persistent storage using Origin Private File System.
 -   **No Tracking**: Zero analytics, no telemetry, no external requests after model download.
@@ -166,19 +166,20 @@ To solve this, we use `coi-serviceworker`, a production-grade polyfill that relo
 ## 🧠 Technical Details
 
 ### AI Models
--   **Semantic Search**: `onnx-community/embeddinggemma-300m-ONNX` (~300MB compressed)
+-   **Semantic Search**: `onnx-community/embeddinggemma-300m-ONNX`, 4-bit weights (`q4`, ~197 MB)
     - Generates 768-dimensional embeddings for semantic similarity search
-    - Quantized ONNX format for optimal browser performance
--   **Auto-Tagging**: `Xenova/LaMini-Flan-T5-77M` (~77MB)
+    - Quantized weights keep the download small; the output vector is still float32
+    - Stored vectors are tagged with the model + precision and re-embedded automatically if that changes
+-   **Auto-Tagging**: `Xenova/LaMini-Flan-T5-77M`, 8-bit weights (`q8`, ~95 MB), runs on WASM
     - Text-to-text generation model for extracting keywords
     - Supports multiple languages including Greek
     - Automatically extracts hashtags and generates contextual tags
 
 ### Service Worker & Offline Caching
--   **Model Caching**: Service Worker intercepts and caches all HuggingFace model requests
--   **Cache-First Strategy**: Models load instantly from cache after first download
+-   **Model Caching**: Transformers.js stores model files in Cache Storage (`transformers-cache`)
+-   **App Shell Caching**: the service worker keeps the HTML, JS, CSS, `sqlite3.wasm` and the ONNX runtime (network first, cache when offline)
 -   **Automatic Updates**: Service Worker updates seamlessly in the background
--   **True Offline**: Once models are cached, the app works 100% offline
+-   **True Offline**: after one online visit the app cold-starts with no network at all
 -   **Cache Storage**: Separate from OPFS, uses browser's Cache API for model files
 
 ### Architecture
