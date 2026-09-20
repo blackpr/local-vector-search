@@ -2,7 +2,7 @@
 
 ### AI in a browser tab. No backend. No API key. No Wi-Fi.
 
-Vangelis · AI Builders SKG
+Tim · AI Builders SKG
 
 &nbsp;
 
