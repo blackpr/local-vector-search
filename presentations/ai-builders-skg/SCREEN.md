@@ -51,7 +51,7 @@ So I wrote it down. In the app.
 
 your question → **768 numbers** → nearest notes → back to the screen
 
-[useWorker.ts](../../src/hooks/useWorker.ts#L21) · [app.worker.ts](../../src/app.worker.ts#L146)
+[useWorker.ts](../../src/hooks/useWorker.ts#L21) · [app.worker.ts](../../src/app.worker.ts#L102)
 
 &nbsp;
 
@@ -83,7 +83,17 @@ It has rules: [queries and notes get different prefixes](../../src/infrastructur
 
 Forget them → nothing crashes → results quietly get worse.
 
-Bonus model for tags. [The entire prompt](../../src/infrastructure/TaggingService.ts#L54).
+&nbsp;
+
+**It also writes the tags. Except it can't write.**
+
+```
+every word in the note   →  a candidate tag
+embed the note + every candidate
+closest candidates       →  the tags
+```
+
+It can't write words. It can *measure* them. [The code](../../src/infrastructure/EmbeddingTaggingService.ts#L32)
 
 &nbsp;
 
@@ -175,14 +185,20 @@ Nobody blames the cache. Everybody blames the model.
 
 &nbsp;
 
-## One word cost 1.3 GB
+## One word cost a gigabyte
 
 ```
-dtype: 'fp32'   →   1.6 GB first visit
-dtype: 'q4'     →   317 MB first visit      same results on my test set
+dtype: 'fp32'   →   1235 MB model
+dtype: 'q4'     →    197 MB model      same results on my test set
 ```
 
 [The word](../../src/infrastructure/TransformersVectorService.ts#L10). `dtype` = how many bits per number in the model file you **download**. What comes **out** is float32 either way.
+
+&nbsp;
+
+**Sequel:** 4-bit on the CPU: correct. 4-bit on my GPU: junk, silently.
+
+So the model now [takes a two-sentence exam at startup](../../src/infrastructure/TransformersVectorService.ts#L72) and gets demoted to CPU if it fails.
 
 &nbsp;
 

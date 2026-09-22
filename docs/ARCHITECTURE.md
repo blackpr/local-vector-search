@@ -27,18 +27,20 @@ We utilize **Pure Dependency Injection** (also known as "Poor Man's DI" or "Manu
 -   **Explicitness**: Dependency graphs are statically analyzable and easy to follow.
 
 **How it works**
-Dependencies are defined as Interfaces in the Domain layer. Concrete implementations are manually instantiated and injected in the **Composition Root** (`src/worker.ts`):
+Dependencies are defined as Interfaces in the Domain layer. Concrete implementations are manually instantiated and injected in the **Composition Root** (`src/app.worker.ts`):
 
 ```typescript
-// src/worker.ts (Composition Root)
+// src/app.worker.ts (Composition Root)
 
 // 1. Create Infrastructure (Concrete Implementations)
-const db = await DatabaseFactory.createDatabase();
-const vectorService = new TransformersVectorService();
+const { db, storage } = await DatabaseFactory.createDatabase(); // storage: 'opfs' | 'memory'
+const vectorService = new TransformersVectorService();          // search AND tagging
+const taggingService = new EmbeddingTaggingService(vectorService);
 const noteRepository = new SqliteNoteRepository(db);
 
 // 2. Inject into Application (Use Cases)
 const addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService);
+const updateNoteUseCase = new UpdateNoteUseCase(noteRepository, vectorService); // re-embeds on text change
 const searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
 ```
 
@@ -48,6 +50,12 @@ To ensure a "jank-free" experience (60fps), all heavy lifting (AI inference, Vec
 -   The **Main Thread** (React) handles UI rendering and user input.
 -   The **Worker Thread** handles logic.
 -   Communication happens via a strongly-typed message passing system (`WorkerMessage`, `WorkerResponse`).
+-   A separate **Service Worker** (`src/sw.ts`) caches the app shell so the app cold-starts offline. Model files are cached by Transformers.js itself.
+
+### 4. Derived Data Rules
+-   A note's vector is derived from its text. `UpdateNoteUseCase` recomputes it when the text changes, and the repository writes text and vector in one transaction.
+-   Vectors are only comparable with vectors from the same model and weight precision, so the database stores an `embedding_version`. `ReindexNotesUseCase` re-embeds everything once when it changes.
+-   The embedding model runs a two-sentence sanity check after loading and falls back from WebGPU to WASM if the output is degenerate.
 
 ## Directory Structure
 ```
@@ -56,6 +64,8 @@ src/
 ├── application/      # Use Cases (AddNote, Search, etc.)
 ├── infrastructure/   # Implementations (SQLite, Transformers)
 ├── presentation/     # UI (React Components)
-├── hooks/            # React Hooks (useWorker)
-└── worker.ts         # Entry Point & Composition Root
+├── hooks/            # React Hooks (useWorker, useUrlSync)
+├── offline/          # App-shell cache warm-up shared by page, worker and service worker
+├── app.worker.ts     # Web Worker: Entry Point & Composition Root
+└── sw.ts             # Service Worker: offline app shell
 ```

@@ -9,7 +9,7 @@ A privacy-first, offline-capable semantic search engine running entirely in your
 We've just shipped **33+ major features** transforming this into a production-ready application:
 
 - ✅ **Complete DDD Architecture** - Enterprise-grade code organization
-- ✅ **Dual AI Models** - Semantic search + auto-tagging (~300 MB total)
+- ✅ **One AI Model, Two Jobs** - Semantic search + auto-tagging from a single ~220 MB embedding model
 - ✅ **Soft Delete with Undo** - 10-second recovery window
 - ✅ **URL Synchronization** - Deep linking for all app states
 - ✅ **Manual Sync** - Cross-device synchronization without cloud
@@ -23,18 +23,16 @@ We've just shipped **33+ major features** transforming this into a production-re
 
 ### 🔒 Privacy & Offline-First
 -   **100% Private**: No data ever leaves your device. All AI inference and storage happen locally.
--   **Fully Offline**: Works without internet connection after the first visit (~300 MB of models, downloaded once).
+-   **Fully Offline**: Works without internet connection after the first visit (~220 MB model download, once).
 -   **Service Worker Caching**: AI models cached automatically for instant offline access.
 -   **OPFS Storage**: High-performance persistent storage using Origin Private File System.
 -   **No Tracking**: Zero analytics, no telemetry, no external requests after model download.
 
 ### 🤖 AI-Powered Intelligence
 -   **Semantic Search**: Find notes by meaning, not just keywords (e.g., "cooking" finds "pasta recipe").
--   **Auto-Tagging**: AI automatically generates relevant tags for your notes using LaMini-Flan-T5-77M.
+-   **Auto-Tagging**: suggests tags by measuring which words in a note sit closest to the note's meaning.
 -   **Smart Categories**: AI-powered category suggestions based on note content.
--   **Dual Embedding Models**: 
-    - `EmbeddingGemma-300M` for semantic search
-    - `LaMini-Flan-T5-77M` for tag generation
+-   **One Model**: `EmbeddingGemma-300M` powers both search and tagging
 -   **Multi-language Support**: Works with Greek, English, and other languages.
 
 ### 📝 Note Management
@@ -60,7 +58,7 @@ We've just shipped **33+ major features** transforming this into a production-re
 
 ### ⚡ Performance
 -   **60fps UI**: Web Workers ensure smooth, jank-free user experience.
--   **WebGPU / WASM**: Hardware-accelerated AI inference.
+-   **WebGPU / WASM**: the model tries the GPU first, checks its own output with a two-sentence sanity test, and falls back to the CPU (WASM) if the numbers are wrong. Quantized weights on some GPUs return silently degenerate vectors; the check catches that.
 -   **Optimized Queries**: Production-ready database indexes for fast searches.
 -   **Lazy Loading**: Models download on-demand with progress indicators.
 -   **Efficient Pagination**: Load only what you need, when you need it.
@@ -82,7 +80,7 @@ We've just shipped **33+ major features** transforming this into a production-re
 -   **RAM**: 4GB minimum, 8GB+ recommended
 -   **Storage**: 500MB free space for models and database
 -   **CPU**: Modern multi-core processor for faster AI inference
--   **GPU**: WebGPU-compatible GPU for hardware acceleration (optional but recommended)
+-   **GPU**: WebGPU-compatible GPU for hardware acceleration (optional; the app falls back to CPU automatically)
 
 ## �📦 Installation
 
@@ -170,10 +168,10 @@ To solve this, we use `coi-serviceworker`, a production-grade polyfill that relo
     - Generates 768-dimensional embeddings for semantic similarity search
     - Quantized weights keep the download small; the output vector is still float32
     - Stored vectors are tagged with the model + precision and re-embedded automatically if that changes
--   **Auto-Tagging**: `Xenova/LaMini-Flan-T5-77M`, 8-bit weights (`q8`, ~95 MB), runs on WASM
-    - Text-to-text generation model for extracting keywords
-    - Supports multiple languages including Greek
-    - Automatically extracts hashtags and generates contextual tags
+-   **Auto-Tagging**: no second model. Every word and two-word phrase in the note is a candidate tag; the note and the candidates are embedded with the same EmbeddingGemma model, and the candidates closest to the note win (the KeyBERT idea, with a diversity step so tags don't repeat each other)
+    - Works in every language the embedding model knows, including Greek
+    - Manual `#hashtags` are extracted and merged in
+    - Limitation: a tag is always a word that appears in the note
 
 ### Service Worker & Offline Caching
 -   **Model Caching**: Transformers.js stores model files in Cache Storage (`transformers-cache`)

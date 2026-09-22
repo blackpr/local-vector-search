@@ -116,10 +116,6 @@
 "give a talk"
 ],
 [
-"how do tags get generated",
-"Auto-tagging"
-],
-[
 "why is it called latent",
 "Why is it called Latent"
 ],
@@ -142,6 +138,26 @@
 [
 "what is quantization",
 "What is dtype"
+],
+[
+"how do tags get generated",
+"How do tags get generated"
+],
+[
+"how can an embedding model make tags if it only outputs numbers",
+"How do tags get generated"
+],
+[
+"why not use an llm for tagging",
+"Why not a text-generating model"
+],
+[
+"why does the model take an exam at startup",
+"take an exam"
+],
+[
+"what if the gpu gives wrong numbers",
+"Why does the model take an exam"
 ],
 [
 "the weather in london tomorrow",
