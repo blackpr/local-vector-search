@@ -29,7 +29,9 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 
 - **WASM:** a compact binary format browsers run at near-native speed. Lets C/C++/Rust code (SQLite, ONNX Runtime) run in a tab. CPU only.
 - **WebGPU:** the modern browser API for the GPU, successor to WebGL, designed for compute as well as graphics. This is what makes model inference in a browser fast.
-- **Q: "Does it work on Safari/Firefox?"** WASM path works everywhere. WebGPU support is uneven, that's why `auto` with fallback. Say which browser you tested in.
+- **Q: "Does it work on Safari/Firefox?"** WASM path works everywhere. WebGPU support is uneven. Say which browser you tested in.
+- **The startup exam (good story):** q4 weights on WASM are correct; on a real Mac GPU they returned junk, silently: every note the same distance from every query, UI looked fine. Headless tests have no GPU, so it was never caught. Now `TransformersVectorService.initialize()` asks the browser for a GPU adapter, loads there if one exists, embeds "pasta with garlic…" vs "something quick for dinner" vs "kubernetes pod keeps restarting", and requires the related pair to be clearly closer (gap > 0.08; WASM gives ~0.27). Fails → dispose, reload on WASM. Console prints `Vector model sanity check: gap = …` and `Vector model: q4 on webgpu|wasm`.
+- **Trap inside the trap:** Transformers.js keeps the first session promise it ever made in a worker (`wasmInitPromise`). If the first load throws, every later load in that worker throws the same error. That's why the code checks for a GPU adapter *before* trying WebGPU instead of try/catch.
 
 ## EmbeddingGemma (onnx-community/embeddinggemma-300m-ONNX)
 
@@ -42,13 +44,19 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 - **Changing weights changes vectors slightly,** so the DB stores `embedding_version` (model + dtype) in a `meta` table and re-embeds every note once when it differs (`ReindexNotesUseCase`).
 - **Why not all-MiniLM-L6-v2 (the classic, 23 MB)?** English-centric. My notes are Greek + English.
 
-## LaMini-Flan-T5-77M (tagging)
+## Tagging with the embedding model (no second model)
 
-- **30 seconds:** a tiny instruction-following text-to-text model (Flan-T5-small distilled on instruction data). We prompt `Extract keywords: <note>` and split the output on commas.
-- **Why:** smallest thing that can follow an instruction in a browser.
-- **Runs as:** q8 weights on WASM (~95 MB; fp32 was ~374 MB). That is the combination Transformers.js defaults to for this kind of model.
-- **Gotcha:** README claims it handles Greek. It's mostly English-trained, so Greek tags are likely poor. **VERIFY** before claiming. Manual `#hashtags` are regex-extracted and merged, that part is language-proof.
-- **Simpler alternative:** no second model at all. Use the embedding model: embed candidate tags, pick nearest. Saves ~95 MB and one model load.
+- **30 seconds:** an embedding model can't write words, but it can measure them. Every word and two-word phrase in the note is a candidate tag. Embed the note, embed every candidate, keep the candidates closest to the note. The words nearest to the whole note's meaning are its tags. The technique is called KeyBERT.
+- **Steps in the code** (`EmbeddingTaggingService.ts`, candidates in `domain/KeyphraseCandidates.ts`):
+  1. Split the note at punctuation, take 1- and 2-word phrases, drop ones that start or end with a stop word (English + Greek list) or are just numbers. Max 48.
+  2. Embed the note alone, then the candidates in batches of 16, using EmbeddingGemma's `task: clustering` prompt (the one meant for "put similar texts close together"). Cosine similarity note vs candidate = score.
+  3. A two-word phrase only survives if it scores higher than both of its words ("vector search" beats "vector" and "search"; "called quantization" loses to "quantization").
+  4. Pick 5 with MMR (maximal marginal relevance): each pick balances "close to the note" against "different from what's already picked", so you don't get sqlite, sqlite wasm, real sqlite.
+  5. Merge with manual `#hashtags`.
+- **Why the note is embedded separately:** a batch is padded to its longest text. One long note in a batch of two-word candidates made every candidate as slow as the note (8 s became 3 s when split).
+- **What it replaced:** `Xenova/LaMini-Flan-T5-77M`, a 77M text-generating model prompted with "Extract keywords:". On the same notes it looped ("API - API - API"), returned whole sentences as one tag, and returned an empty string for Greek. `TaggingService.ts` is still in the repo but unused; delete it when you like.
+- **Limit:** a tag is always a word that's in the note. It can't invent "devops" for a Kubernetes note. Next step if you want that: also offer the tags you already use elsewhere as candidates.
+- **Speed:** 2.5 to 4.5 s per note on a 2-core headless machine on WASM. Not measured on WebGPU.
 
 ## SQLite WASM
 
@@ -108,8 +116,8 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 | --- | --- |
 | Embedding dims | 768 |
 | Embedding model | ~300M params; 197 MB at q4 (was 1235 MB at fp32) |
-| Tagging model | 77M params; ~95 MB at q8 (was ~374 MB at fp32) |
-| First-visit download | 317 MB measured (was ~1.6 GB) |
+| Tagging model | none; the embedding model does it (was LaMini-Flan-T5, ~374 MB at fp32) |
+| First-visit download | 222 MB measured (was ~1.6 GB) |
 | SQLite WASM | 5.9 MB |
 | Distance cutoff | L2 < 1.0 (= cosine > 0.5) |
 | Soft delete undo | 10 s |

@@ -16,7 +16,7 @@ import { ReindexNotesUseCase } from './application/ReindexNotesUseCase';
 import { DatabaseFactory } from './infrastructure/DatabaseFactories';
 import { SqliteNoteRepository } from './infrastructure/SqliteNoteRepository';
 import { TransformersVectorService, VECTOR_MODEL_BYTES } from './infrastructure/TransformersVectorService';
-import { TaggingService, TAGGING_MODEL_BYTES } from './infrastructure/TaggingService';
+import { EmbeddingTaggingService } from './infrastructure/EmbeddingTaggingService';
 import { warmAppCache } from './offline/warmAppCache';
 import { SqliteDatabaseManager } from './infrastructure/SqliteDatabaseManager';
 
@@ -39,54 +39,30 @@ let systemManagementUseCase: SystemManagementUseCase;
 
 let noteRepository: SqliteNoteRepository | undefined;
 let vectorService: TransformersVectorService;
-let taggingService: TaggingService;
+let taggingService: EmbeddingTaggingService;
 let databaseManager: SqliteDatabaseManager;
 
 async function initialize() {
   try {
     console.log("Worker: Initializing...");
 
-    // Track progress for both models with more accurate estimates
-    const modelProgress = {
-      vectorFiles: new Map<string, { loaded: number, total: number }>(),
-      taggingFiles: new Map<string, { loaded: number, total: number }>(),
-      vectorEstimate: VECTOR_MODEL_BYTES,
-      taggingEstimate: TAGGING_MODEL_BYTES,
-      vectorDone: false,
-      taggingDone: false,
-      maxCombined: 0
-    };
-
-    const sendCombinedProgress = () => {
-      const getModelProgress = (fileMap: Map<string, { loaded: number, total: number }>, estimate: number, isDone: boolean) => {
-        if (isDone) return 100;
-        let loaded = 0;
-        let knownTotal = 0;
-        for (const file of fileMap.values()) {
-          loaded += file.loaded;
-          if (file.total) knownTotal += file.total;
-        }
-        const targetTotal = Math.max(knownTotal, estimate);
-        // Cap at 99% until the promise actually resolves
-        return Math.min(99, (loaded / targetTotal) * 100);
-      };
-
-      const vp = getModelProgress(modelProgress.vectorFiles, modelProgress.vectorEstimate, modelProgress.vectorDone);
-      const tp = getModelProgress(modelProgress.taggingFiles, modelProgress.taggingEstimate, modelProgress.taggingDone);
-      const combinedProgress = (vp + tp) / 2;
-
-      // Only send if progress increased (never go backwards)
-      if (combinedProgress > modelProgress.maxCombined) {
-        modelProgress.maxCombined = combinedProgress;
+    // One model now does search AND tagging, so progress is a single download.
+    const files = new Map<string, { loaded: number, total: number }>();
+    let maxProgress = 0;
+    const sendProgress = (done = false) => {
+      let loaded = 0;
+      let knownTotal = 0;
+      for (const file of files.values()) {
+        loaded += file.loaded;
+        if (file.total) knownTotal += file.total;
+      }
+      // Cap at 99% until the promise actually resolves
+      const progress = done ? 100 : Math.min(99, (loaded / Math.max(knownTotal, VECTOR_MODEL_BYTES)) * 100);
+      if (progress > maxProgress) {
+        maxProgress = progress;
         self.postMessage({
           type: 'PROGRESS',
-          payload: {
-            status: 'progress',
-            file: 'models',
-            progress: combinedProgress,
-            loaded: combinedProgress,
-            total: 100
-          }
+          payload: { status: 'progress', file: 'models', progress, loaded: progress, total: 100 }
         } as WorkerResponse);
       }
     };
@@ -94,38 +70,18 @@ async function initialize() {
     // 1. Initialize Infrastructure
     vectorService = new TransformersVectorService((data) => {
       if (data.status === 'progress' && data.file) {
-        modelProgress.vectorFiles.set(data.file, {
-          loaded: data.loaded || 0,
-          total: data.total || 0
-        });
-        sendCombinedProgress();
+        files.set(data.file, { loaded: data.loaded || 0, total: data.total || 0 });
+        sendProgress();
       }
     });
+    taggingService = new EmbeddingTaggingService(vectorService);
 
-    taggingService = new TaggingService((data) => {
-      if (data.status === 'progress' && data.file) {
-        modelProgress.taggingFiles.set(data.file, {
-          loaded: data.loaded || 0,
-          total: data.total || 0
-        });
-        sendCombinedProgress();
-      }
-    });
-
-    // Start model loading immediately (in parallel)
-    console.log("Worker: Loading Vector Model and Tagging Model...");
+    // Start model loading immediately (in parallel with opening the DB)
+    console.log("Worker: Loading embedding model...");
     const modelInitPromise = vectorService.initialize().then(() => {
-      modelProgress.vectorDone = true;
-      sendCombinedProgress();
+      sendProgress(true);
     }).catch(err => {
       throw new Error(`Vector Model Load Failed: ${err.message}`);
-    });
-
-    const taggingInitPromise = taggingService.initialize().then(() => {
-      modelProgress.taggingDone = true;
-      sendCombinedProgress();
-    }).catch(err => {
-      throw new Error(`Tagging Model Load Failed: ${err.message}`);
     });
 
     console.log("Worker: Opening DB...");
@@ -135,7 +91,7 @@ async function initialize() {
     noteRepository = new SqliteNoteRepository(db);
 
     console.log("Worker: Waiting for Models...");
-    await Promise.all([modelInitPromise, taggingInitPromise]);
+    await modelInitPromise;
     console.log("Worker: Models Loaded.");
 
     // databaseManager needs access to current noteRepository for export/closing
