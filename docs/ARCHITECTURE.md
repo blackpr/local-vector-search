@@ -39,7 +39,7 @@ const taggingService = new EmbeddingTaggingService(vectorService);
 const noteRepository = new SqliteNoteRepository(db);
 
 // 2. Inject into Application (Use Cases)
-const addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService);
+const addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService, taggingService); // tags + embed + save on Save
 const updateNoteUseCase = new UpdateNoteUseCase(noteRepository, vectorService); // re-embeds on text change
 const searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
 ```

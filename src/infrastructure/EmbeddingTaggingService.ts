@@ -40,8 +40,12 @@ export class EmbeddingTaggingService implements TaggingSystem {
       // The note goes in alone: a batch is padded to its longest text, so mixing
       // one long note with many two-word candidates would make every candidate
       // as expensive as the note.
+      const t0 = performance.now();
+      console.log(`Tagging: ${candidates.length} candidates, embedding...`);
       const [noteVector] = await this.vectorService.generateSimilarityEmbeddings([text]);
       const vectors = await this.vectorService.generateSimilarityEmbeddings(candidates.map((c) => c.key));
+      console.log(`Tagging: embedded ${candidates.length} candidates in ${Math.round(performance.now() - t0)} ms`);
+
       let scored = candidates.map((c, i) => ({ ...c, vector: vectors[i], score: dot(noteVector, vectors[i]) }));
 
       const scoreOf = new Map(scored.map((c) => [c.key, c.score]));

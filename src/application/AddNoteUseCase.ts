@@ -1,17 +1,29 @@
 import type { Note, NewNote } from '../domain/Note';
 import type { NoteRepository } from '../domain/NoteRepository';
 import type { VectorService } from '../domain/VectorService';
+import type { TaggingSystem } from '../domain/TaggingSystem';
 
 export class AddNoteUseCase {
   private noteRepository: NoteRepository;
   private vectorService: VectorService;
+  private taggingSystem?: TaggingSystem;
 
-  constructor(noteRepository: NoteRepository, vectorService: VectorService) {
+  constructor(noteRepository: NoteRepository, vectorService: VectorService, taggingSystem?: TaggingSystem) {
     this.noteRepository = noteRepository;
     this.vectorService = vectorService;
+    this.taggingSystem = taggingSystem;
   }
 
+  /**
+   * Everything happens on Save: suggest tags (merged with any the user typed),
+   * embed the text, pick a category if none was given, write the row.
+   */
   async execute(text: string, category: string, tags: string[] = []): Promise<Note> {
+    if (this.taggingSystem) {
+      const suggested = await this.taggingSystem.generateTags(text).catch(() => [] as string[]);
+      tags = [...new Set([...tags, ...suggested])];
+    }
+
     const embedding = await this.vectorService.generateEmbedding(text);
 
     let finalCategory = category;

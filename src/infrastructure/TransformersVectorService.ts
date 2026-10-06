@@ -1,4 +1,10 @@
-import { pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers';
+
+// ONNX Runtime prints "some nodes were not assigned to the preferred execution
+// provider" through console.error every time a WebGPU session is created.
+// It's informational (a few shape ops run on the CPU); keep the console for
+// real errors.
+env.backends.onnx.logLevel = 'error';
 import type { VectorService } from '../domain/VectorService';
 
 const MODEL_ID = 'onnx-community/embeddinggemma-300m-ONNX';
@@ -101,21 +107,16 @@ export class TransformersVectorService implements VectorService {
       await this.initialize();
     }
     if (!this.classifier) throw new Error('Classifier failed to initialize');
-    if (texts.length === 0) return [];
 
     // EmbeddingGemma's prompt for "put similar texts close together".
+    // One text per call: same code path as search, no padding/batching, and
+    // every inference in Transformers.js is queued anyway, so a batch would
+    // not run in parallel. It also keeps memory flat on the WASM backend.
     const prefix = 'task: clustering | query: ';
     const vectors: Float32Array[] = [];
-    // Small batches keep memory flat on the WASM backend.
-    const BATCH = 16;
-    for (let start = 0; start < texts.length; start += BATCH) {
-      const batch = texts.slice(start, start + BATCH).map((t) => prefix + t);
-      const output = await this.classifier(batch, { pooling: 'mean', normalize: true });
-      const size = output.dims[output.dims.length - 1];
-      const data = output.data as Float32Array;
-      for (let i = 0; i < batch.length; i++) {
-        vectors.push(data.slice(i * size, (i + 1) * size));
-      }
+    for (const text of texts) {
+      const output = await this.classifier(prefix + text, { pooling: 'mean', normalize: true });
+      vectors.push(output.data as Float32Array);
     }
     return vectors;
   }
@@ -123,7 +124,7 @@ export class TransformersVectorService implements VectorService {
 
 async function hasWebGpuAdapter(): Promise<boolean> {
   try {
-    const gpu = (navigator as any).gpu;
+    const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
     if (!gpu) return false;
     return (await gpu.requestAdapter()) !== null;
   } catch {

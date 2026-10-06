@@ -14,10 +14,15 @@ export function useWorker() {
 
   useEffect(() => {
     let worker: Worker | null = null;
+    // React StrictMode mounts twice in dev. The import below resolves after the
+    // first cleanup has already run, so without this flag two workers would
+    // start, both load the model, and both stay alive.
+    let cancelled = false;
 
     // Use Vite's ?worker suffix for proper TypeScript worker handling
     // This ensures the worker is compiled to .js with correct MIME type
     import('../app.worker.ts?worker').then((WorkerModule) => {
+      if (cancelled) return;
       worker = new WorkerModule.default();
       workerRef.current = worker;
       setStatus('loading');
@@ -82,13 +87,25 @@ export function useWorker() {
     });
 
     return () => {
+      cancelled = true;
       worker?.terminate();
     };
   }, []);
 
   const addNote = useCallback((text: string, category: string, tags: string[]) => {
-    setIsIndexing(true);
-    workerRef.current?.postMessage({ type: 'ADD_NOTE', payload: { text, category, tags } });
+    return new Promise<boolean>((resolve) => {
+      const worker = workerRef.current;
+      if (!worker) return resolve(false);
+      const handler = (e: MessageEvent<WorkerResponse>) => {
+        if (e.data.type === 'NOTE_ADDED' || e.data.type === 'ERROR') {
+          worker.removeEventListener('message', handler);
+          resolve(e.data.type === 'NOTE_ADDED');
+        }
+      };
+      worker.addEventListener('message', handler);
+      setIsIndexing(true);
+      worker.postMessage({ type: 'ADD_NOTE', payload: { text, category, tags } });
+    });
   }, []);
 
   const search = useCallback((query: string, limit: number = 20, offset: number = 0) => {

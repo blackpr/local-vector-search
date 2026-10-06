@@ -13,7 +13,7 @@ import { NoteListView } from './presentation/views/NoteListView';
 import { AddNoteView } from './presentation/views/AddNoteView';
 
 function App() {
-    const { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, suggestCategory, generateTags, getNote } = useWorker();
+    const { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, generateTags, getNote } = useWorker();
 
     // UI State
     const [query, setQuery] = useState('');
@@ -91,10 +91,13 @@ function App() {
         // For 'list', useEffect triggers listNotes
     };
 
-    const handleAddNote = (text: string, category: string, tags: string[]) => {
-        addNote(text, category, tags);
+    const handleAddNote = async (text: string, category: string, tags: string[]) => {
+        const saved = await addNote(text, category, tags);
+        if (!saved) return false;
         setOffset(0);
         setActiveTab('list');
+        listNotes(LIMIT, 0, filterCategory || undefined, filterTag || undefined);
+        return true;
     };
 
     const handleCategoryClick = (category: string | null) => {
@@ -340,8 +343,6 @@ function App() {
                         onAdd={handleAddNote}
                         categories={categories}
                         isProcessing={isIndexing}
-                        onAutoCategory={suggestCategory}
-                        onAutoTags={generateTags}
                     />
                 )}
             </main>

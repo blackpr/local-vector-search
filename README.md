@@ -106,11 +106,9 @@ We've just shipped **33+ major features** transforming this into a production-re
 
 ### Creating Notes
 1. Click the **"Add Note"** tab
-2. Write your note content (supports markdown)
-3. **AI Auto-Tagging**: The system automatically generates relevant tags as you type
-4. **AI Category Suggestion**: Click "Suggest Category" for AI-powered categorization
-5. Add manual hashtags with `#tag` syntax for instant tagging
-6. Click **"Save Note"** to store your note
+2. Write your note content (supports markdown); add your own tags inline with `#tag`
+3. Pick a category
+4. Click **"Save Note"**. Tags are suggested, the embedding is computed and the note is written, all on that click (a couple of seconds on the CPU path)
 
 ### Searching Notes
 1. Use the **"Search"** tab for semantic search
@@ -123,7 +121,7 @@ We've just shipped **33+ major features** transforming this into a production-re
 -   **Filter by Category**: Click any category badge to filter notes
 -   **Filter by Tag**: Click any tag to see all notes with that tag
 -   **Delete with Undo**: Deleted notes can be restored within 10 seconds via the toast notification
--   **Edit Notes**: Click any note to view/edit in detail view
+-   **Edit Notes**: Click any note to view/edit in detail view; **Suggest tags** re-runs tagging on the edited text when you ask for it
 
 ### URL Synchronization
 -   **Share State**: Copy the URL to share your current view (search query, filters, selected note)

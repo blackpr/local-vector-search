@@ -99,7 +99,7 @@ async function initialize() {
 
     // 2. Initialize Application Layer (Use Cases)
     // We pass dependencies. implicit dependency injection.
-    addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService);
+    addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService, taggingService);
     searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
     listNotesUseCase = new ListNotesUseCase(noteRepository);
     deleteNoteUseCase = new DeleteNoteUseCase(noteRepository);
@@ -143,8 +143,8 @@ self.onmessage = async (e: MessageEvent<WorkerMessage>) => {
     } else if (type === 'ADD_NOTE') {
       if (!addNoteUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;
-      await addNoteUseCase.execute(payload.text, payload.category, payload.tags);
-      self.postMessage({ type: 'NOTE_ADDED', text: payload.text } as WorkerResponse);
+      const added = await addNoteUseCase.execute(payload.text, payload.category, payload.tags);
+      self.postMessage({ type: 'NOTE_ADDED', text: payload.text, note: added } as WorkerResponse);
     } else if (type === 'SEARCH') {
       if (!searchNotesUseCase) throw new Error('Not initialized');
       const payload = (e.data as any).payload;

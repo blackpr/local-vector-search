@@ -19,7 +19,7 @@ export type WorkerMessage =
 
 export type WorkerResponse =
   | { type: 'READY'; storage: 'opfs' | 'memory' }
-  | { type: 'NOTE_ADDED'; text: string }
+  | { type: 'NOTE_ADDED'; text: string; note?: unknown }
   | { type: 'NOTE_UPDATED'; payload?: any }
   | { type: 'SEARCH_RESULTS'; results: Array<{ text: string; category: string; distance: number }> }
   | { type: 'NOTES_LISTED'; results: Array<{ id: number; text: string; category: string; created_at: string }> }

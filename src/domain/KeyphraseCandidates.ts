@@ -18,7 +18,7 @@ const STOP_WORDS = new Set(
   ).split(' '),
 );
 
-const MAX_CANDIDATES = 48;
+const MAX_CANDIDATES = 32;
 
 export interface KeyphraseCandidate {
   /** lower-cased, used as the tag */

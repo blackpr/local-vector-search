@@ -31,7 +31,8 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
     setTags(note.tags || []);
   }, [note]);
 
-  const handleBlur = async () => {
+  // Runs only when the user asks for it (the "Suggest tags" button).
+  const suggestTags = async () => {
     if (isEditing && text.trim().length > 5 && onAutoTags && !isProcessingTags) {
       setIsProcessingTags(true);
       try {
@@ -111,10 +112,16 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
                   </button>
                 </span>
               ))}
-              {isProcessingTags && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs text-indigo-400 animate-pulse">
-                  <Loader2 className="w-3 h-3 animate-spin" /> Tagging...
-                </span>
+              {onAutoTags && (
+                <button
+                  type="button"
+                  onClick={suggestTags}
+                  disabled={isProcessingTags || text.trim().length <= 5}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs text-indigo-300 bg-indigo-500/10 border border-indigo-500/30 hover:bg-indigo-500/20 disabled:opacity-50"
+                >
+                  {isProcessingTags ? <Loader2 className="w-3 h-3 animate-spin" /> : <Tag className="w-3 h-3" />}
+                  {isProcessingTags ? 'Tagging…' : 'Suggest tags'}
+                </button>
               )}
             </>
           ) : (
@@ -132,7 +139,6 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            onBlur={handleBlur}
             className="w-full h-[60vh] bg-zinc-800/50 text-zinc-100 p-4 rounded-xl border border-zinc-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-mono text-sm leading-relaxed resize-none focus:outline-none"
             placeholder="Write your note here..."
           />
