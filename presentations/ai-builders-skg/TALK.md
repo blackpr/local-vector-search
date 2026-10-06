@@ -6,7 +6,7 @@ About 25 minutes. Only your laptop is used; the room talks, you type.
 ## Setup on stage
 
 - VS Code: `SCREEN.md` in preview (`Cmd+Shift+V`), zoomed until the back row can read it, Zen mode (`Cmd+K Z`).
-- Browser: Latent open, green **System Ready**, the 35 notes from [talk-brain.json](talk-brain.json) imported, zoom 150%.
+- Browser: Latent open, green **System Ready**, the 37 notes from [talk-brain.json](talk-brain.json) imported, zoom 150%.
 - You switch between those two windows all night. `Cmd+Tab`.
 - This file: on your phone or a second screen, if you want it at all.
 
@@ -64,11 +64,11 @@ If the room is shy, these all passed testing:
 
 Same three beats per stop: what, why, what it cost. Click the code link, show it for ten seconds, come back.
 
-1. **Transformers.js.** Same `pipeline()` as Python. `device: 'auto'` = WebGPU if present, WASM if not. Cost: users download the model. People will ask about TensorFlow.js: the quote on screen is the answer.
-2. **EmbeddingGemma.** Google, on-device, multilingual, which you just saw. The prefixes are the gotcha. Then the tagging trick, which is the cleverest thing in the repo. **SAY:** "This model can only output numbers. It can't write a single word. So how does it write my tags? It doesn't. I take every word in the note as a candidate tag, embed the note, embed every candidate, and keep the words that land closest to the note. The model never writes anything, it just tells me which of my own words best stand for the whole note." If someone asks: it's called KeyBERT. The app used to load a second, text-generating model for this (LaMini-Flan-T5). It repeated itself, returned whole sentences as one tag, and returned nothing for Greek. Live proof if you want it: Add tab, paste a Greek sentence, click outside the box, watch Greek tags appear.
+1. **Transformers.js.** Same `pipeline()` as Python. It tries the GPU (WebGPU) first, then the CPU (WASM); the exam that decides is story 2's sequel, don't spoil it yet. Cost: users download the model. People will ask about TensorFlow.js: the quote on screen is the answer.
+2. **EmbeddingGemma.** Google, on-device, multilingual, which you just saw. The prefixes are the gotcha. Then the tagging trick, which is the cleverest thing in the repo. **SAY:** "This model can only output numbers. It can't write a single word. So how does it write my tags? It doesn't. I take every word in the note as a candidate tag, embed the note, embed every candidate, and keep the words that land closest to the note. The model never writes anything, it just tells me which of my own words best stand for the whole note." If someone asks: it's called KeyBERT. The app used to load a second, text-generating model for this (LaMini-Flan-T5). It repeated itself, returned whole sentences as one tag, and returned nothing for Greek. Live proof if you want it: Add tab, paste a Greek sentence, press Save. The button says "Tagging & saving…" for about two seconds (it's embedding ~30 candidate words on the CPU), then the note shows up in the list with Greek tags.
 3. **SQLite WASM.** Run `ls -lh public/assets/` live in the terminal. Notes and vectors in one file, backup = download the file.
 4. **OPFS saga.** Read the chain top to bottom, slowly. End with: "Seven levels deep to save a note. Everyone here has a chain like this. Tell me yours at the bar."
-5. **sqlite-vec.** Read two lines of the query aloud. It's brute force and that's fine for one person's notes. Then the badge confession: earlier tonight the *correct* answer showed "13% match". That's how made up it is.
+5. **sqlite-vec.** Read two lines of the query aloud. It's brute force and that's fine for one person's notes. Then the badge confession: point at the percentage on a result you all agreed was correct earlier, probably something like 20 or 30%. That's how made up it is.
 6. **Web worker.** Short. Everything is messages, no shared objects.
 
 ## 4 · Stump the model (4 min)
@@ -104,7 +104,10 @@ If you're short on time, this is the round to trim to one story. Keep #2, it's t
 
 ## 6 · Wrap-up (1 min)
 
-Read the three lines. Then the agent line: this is one `search_notes(query)` tool away from being an agent's private, offline memory, and that's a talk someone here could give.
+Read the three lines. Then the two "next" lines:
+
+- **Agent:** this is one `search_notes(query)` tool away from being an agent's private, offline memory, and that's a talk someone here could give.
+- **EmbeddingGemma 2:** "Google shipped the next version of my model last week. Same idea, but photos, voice and video land in the same space as text. So: photograph tonight's whiteboard, search it next month by what's on it. And my tagging trick works on photos too: compare the photo with the tags I already use, keep the closest. For text alone it's no better than what I run, and there's no browser build for my stack yet, so it's the next experiment, not tonight's demo." If anyone wants detail, search `what's next for latent` or `what about embeddinggemma 2`.
 
 **DO** Last search of the night: `can I present next time`.
 
@@ -112,11 +115,12 @@ Read the three lines. Then the agent line: this is one `search_notes(query)` too
 
 ## Pre-flight
 
-1. `git checkout fix/stale-vectors-size-storage-offline`, `npm run dev`. Use the same port on the night; browser storage is per origin.
+1. `git checkout main && git pull`, `npm run dev`. Use the same port on the night; browser storage is per origin.
 2. Fresh Chrome profile. Wait for **System Ready** (first time downloads about 220 MB).
    If you open a profile that already has notes, the header shows "Re-indexing notes" once. That's the vectors being rebuilt for the q4 model.
-3. **Sync → Import → JSON** → `talk-brain.json`. Console must say `Using OPFS storage`. An amber "not being saved" banner means OPFS failed; fix that first.
+3. **Sync → Import → JSON** → `talk-brain.json`, even if you imported it before: notes were added and edited since, and the file is dated so import updates them in place (no duplicates). Console must say `Using OPFS storage`. An amber "not being saved" banner means OPFS failed; fix that first.
 4. Run the tables from rounds 1 and 4 yourself. Drop anything that behaves differently in your browser.
-5. Wi-Fi off. Reload the page. It should come back and search should work. (Tested headless with the server killed; confirm it on your machine.)
-6. Editing a note on stage: after typing, the Save button shows "Processing..." while tags generate. Wait for "Save Changes" before clicking.
+5. Wi-Fi off. Reload the page. It should come back and search should work. (Tested headless with the server killed, not yet in your Chrome. This is the one pre-flight item that can still surprise you; do it at home, not at the venue.)
+6. Nothing runs while you type any more. Add: Save does tags + embedding + write. Edit: Save re-embeds if the text changed; "Suggest tags" is a button you press if you want new tags.
 7. Fonts: browser 150%, VS Code preview zoomed, terminal font big.
+8. Expect the console to say `Vector model: q4 on wasm` on your Mac. Searches take a second or two; that's the CPU path and it's fine. Don't be surprised on stage.

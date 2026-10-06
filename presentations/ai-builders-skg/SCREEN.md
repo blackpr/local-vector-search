@@ -51,7 +51,7 @@ So I wrote it down. In the app.
 
 your question → **768 numbers** → nearest notes → back to the screen
 
-[useWorker.ts](../../src/hooks/useWorker.ts#L21) · [app.worker.ts](../../src/app.worker.ts#L102)
+[useWorker.ts](../../src/hooks/useWorker.ts#L26) · [app.worker.ts](../../src/app.worker.ts#L102)
 
 &nbsp;
 
@@ -69,7 +69,7 @@ your question → **768 numbers** → nearest notes → back to the screen
 
 Hugging Face models, in JavaScript, in the browser.
 
-The whole AI integration: [about 25 lines](../../src/infrastructure/TransformersVectorService.ts#L28)
+The whole model integration: [one file](../../src/infrastructure/TransformersVectorService.ts#L66), one `pipeline()` call
 
 > Not TensorFlow.js. TF.js is a framework. This is a runner with a giant shelf of ready models. I wanted the shelf.
 
@@ -79,7 +79,7 @@ The whole AI integration: [about 25 lines](../../src/infrastructure/Transformers
 
 Text in → **768 numbers** out. 300M parameters. 100+ languages.
 
-It has rules: [queries and notes get different prefixes](../../src/infrastructure/TransformersVectorService.ts#L46)
+It has rules: [queries and notes get different prefixes](../../src/infrastructure/TransformersVectorService.ts#L98)
 
 Forget them → nothing crashes → results quietly get worse.
 
@@ -192,13 +192,13 @@ dtype: 'fp32'   →   1235 MB model
 dtype: 'q4'     →    197 MB model      same results on my test set
 ```
 
-[The word](../../src/infrastructure/TransformersVectorService.ts#L10). `dtype` = how many bits per number in the model file you **download**. What comes **out** is float32 either way.
+[The word](../../src/infrastructure/TransformersVectorService.ts#L16). `dtype` = how many bits per number in the model file you **download**. What comes **out** is float32 either way.
 
 &nbsp;
 
 **Sequel:** 4-bit on the CPU: correct. 4-bit on my GPU: junk, silently.
 
-So the model now [takes a two-sentence exam at startup](../../src/infrastructure/TransformersVectorService.ts#L72) and gets demoted to CPU if it fails.
+So the model now [takes a two-sentence exam at startup](../../src/infrastructure/TransformersVectorService.ts#L78) and gets demoted to CPU if it fails.
 
 &nbsp;
 
@@ -207,7 +207,7 @@ So the model now [takes a two-sentence exam at startup](../../src/infrastructure
 | Promise | Kept by |
 | --- | --- |
 | search in an open tab | the model, already in memory |
-| notes survive a restart | OPFS ([and a loud warning when it's missing](../../src/App.tsx#L255)) |
+| notes survive a restart | OPFS ([and a loud warning when it's missing](../../src/App.tsx#L258)) |
 | launch with no network | [service worker](../../src/sw.ts#L26) + [cache warm-up](../../src/offline/warmAppCache.ts#L21) |
 
 &nbsp;
@@ -220,11 +220,14 @@ So the model now [takes a two-sentence exam at startup](../../src/infrastructure
 
 1. The browser is a serious runtime. Database, GPU, file system, model runner. One URL.
 2. Local AI moves the cost. I pay zero per token. Users pay in megabytes and battery.
-3. The AI was 25 lines. Everything interesting was ordinary engineering around it.
+3. Calling the model is one line. Everything interesting, and every bug, was ordinary engineering around it.
 
 &nbsp;
 
-**Next:** `search_notes(query)` as a tool → an agent's private, offline memory.
+**Next:**
+
+- `search_notes(query)` as a tool → an agent's private, offline memory
+- EmbeddingGemma 2 (out since 6 Oct): text, photos, voice, video in **one** space → snap the whiteboard, search it later by what's on it
 
 &nbsp;
 
