@@ -240,3 +240,5 @@ So the model now [takes a two-sentence exam at startup](../../src/infrastructure
 &nbsp;
 
 `github.com/blackpr/local-vector-search` · beerware · the bar is that way
+
+Tim · [linkedin.com/in/tim-pap](https://www.linkedin.com/in/tim-pap/)
