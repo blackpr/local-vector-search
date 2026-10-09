@@ -7,7 +7,7 @@ About 25 minutes. Everything you need on stage is in this one file, including wh
 
 - **Laptop → projector.** Three windows, switched with `Cmd+Tab`:
   - VS Code: `SCREEN.md` in preview (`Cmd+Shift+V`), zoomed until the back row can read it, Zen mode (`Cmd+K Z`). Code files open from the links in it.
-  - Browser: Latent open, green **System Ready**, the 37 notes from `talk-brain.json` imported, zoom 150%.
+  - Browser: Latent open, green **System Ready**, the 38 notes from `talk-brain.json` imported, zoom 150%.
   - Terminal in the repo, big font. Used once, at stop 3.
 - **iPad:** this file. Nothing else.
 - `CHEATSHEET.md` is homework for the week before, not for the stage. The questions you're likely to get are in the **IF ASKED** lines below.
@@ -285,6 +285,7 @@ Then the three links under the chain, a few seconds each:
 
 - "Is the hack running right now?" No. Vercel sends the real headers, so the hack sees the page is already isolated and exits (`coi-serviceworker.js` line 88). It only does anything on hosts like GitHub Pages.
 - "Could you skip the whole chain?" Probably. SQLite has a second OPFS driver, `opfs-sahpool`, that needs no SharedArrayBuffer and no headers, and it's already in this build. The catch: only one tab can have the database open at a time. And I'd lose the speed bonus in the next answer.
+- "What's Spectre?" / "What do COOP and COEP actually do?" Search it: `what is spectre` or `COOP`. The note explains both headers and Spectre in plain words.
 - "Do the headers buy you anything else?" Yes, speed. The model's CPU engine only uses several CPU cores on isolated pages. Measured on this Mac: 90 ms to embed a note with the headers, 296 ms without. Three times faster, from two HTTP headers.
 - "Can the browser delete my data?" Under storage pressure, yes, unless the site has persistent storage. The app asks for it at startup; the browser can still say no. That's what Export is for.
 - "What does COEP actually block?" With it, the page can only load files from other sites if those files say they allow it. Hugging Face and jsdelivr do, which is why the model downloads still work.
@@ -302,29 +303,35 @@ Then the three links under the chain, a few seconds each:
 **ON SCREEN** `SqliteNoteRepository.ts:486`
 
 ```sql
-SELECT notes.rowid as id, notes.text, ... ,
-       vec_distance_L2(vec_notes.embedding, ?) as distance   -- 486
-FROM vec_notes
-LEFT JOIN notes ON vec_notes.rowid = notes.rowid            -- 488
+WITH knn AS (
+  SELECT rowid, distance
+  FROM vec_notes
+  WHERE embedding MATCH ? AND k = ?          -- 486
+)
+SELECT notes.rowid as id, notes.text, ... , knn.distance
+FROM knn
+JOIN notes ON notes.rowid = knn.rowid       -- 500
 WHERE notes.deleted_at IS NULL
-ORDER BY distance ASC                                        -- 490
+ORDER BY knn.distance ASC                   -- 502
 LIMIT ? OFFSET ?
 ```
 
 and a few lines down:
 
 ```ts
-if (row.distance < 1.0) {                                    // 501
+if (row.distance < 1.0) {                    // 513
 ```
 
 **WHAT IT DOES** (read the SQL in this order)
-1. `FROM vec_notes`: go through every stored vector.
-2. `vec_distance_L2(vec_notes.embedding, ?)`: measure the distance from it to the question's vector, which fills the `?`. L2 is ordinary straight-line distance, just in 768 dimensions instead of 2 or 3. This function is what sqlite-vec adds.
-3. `LEFT JOIN notes ON ... rowid`: attach the note that owns the vector (same row number).
+1. `WITH knn AS ( ... )`: a named step. "First find the nearest vectors, and call that list `knn`."
+2. `WHERE embedding MATCH ? AND k = ?`: sqlite-vec's nearest-neighbour search. The first `?` is the question's vector, and `k` is how many neighbours to return. It still measures the distance to every stored vector (ordinary straight-line distance, "L2", just in 768 dimensions), but it does it inside sqlite-vec in fast chunks. It hands back each neighbour's `rowid` and `distance`.
+3. `JOIN notes ON notes.rowid = knn.rowid`: attach the note that owns each vector (same row number).
 4. `WHERE deleted_at IS NULL`: skip notes in the trash.
-5. `ORDER BY distance ASC`: closest first.
+5. `ORDER BY knn.distance ASC`: closest first.
 6. `LIMIT ? OFFSET ?`: one page of 20.
-7. Then in JavaScript, line 501: drop anything at distance 1.0 or more. That's why "weather in London" returns nothing.
+7. Then in JavaScript, line 513: drop anything at distance 1.0 or more. That's why "weather in London" returns nothing.
+
+Why `k` isn't simply 20 (lines 479-480, just above): sqlite-vec picks the neighbours before the trash is filtered out. So the code counts the notes in the trash and asks for that many extra, which keeps every page full. Tested against the old query: identical results, including with a third of the notes trashed.
 
 What the distances mean (all vectors have length 1):
 
@@ -336,9 +343,10 @@ What the distances mean (all vectors have length 1):
 | 2 | opposite |
 
 **SAY**
-- (486 and 490, read aloud) "The distance from every note to my question, closest first. That's vector search. It's a SELECT."
-- (488) "And it joins my normal notes table, like any SQL."
-- (501) "This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0. Nobody told me to."
+- (486, read aloud) "Give me the nearest vectors to my question. That's vector search. It's a WHERE clause."
+- (500-502) "And from there it's plain SQL: join my normal notes table, skip the trash, closest first."
+- (513) "This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0. Nobody told me to."
+- (optional, 15 seconds) "Confession: until this week, this query called the distance function on every single row myself. This is sqlite-vec's own nearest-neighbour search. Same results, 26 times faster at 50,000 notes. Read the docs of the extension you're using."
 
 **ON SCREEN** `NoteList.tsx:83`
 
@@ -353,8 +361,8 @@ What the distances mean (all vectors have length 1):
 **IF ASKED**
 
 - The math: the vectors have length 1, so distance and angle are tied (`d² = 2 − 2·cos`). The cutoff `d < 1.0` means cosine similarity above 0.5. The badge is pessimistic: d = 0.8 shows "20% match" while the cosine is 0.68.
-- "How many notes before it's slow?" "I haven't measured." Don't make up a number.
-- "Real vector databases use indexes like HNSW." True. This one is brute force. **VERIFY** whether sqlite-vec has an approximate index by now before saying it doesn't. Also, the idiomatic query is `WHERE embedding MATCH ? AND k = 20`; mine uses the plain distance function.
+- "How many notes before it's slow?" Search it: `how many notes can it handle`. Or say it: "I measured it on this Mac. 50,000 notes: 23 milliseconds with this query. My first version took over half a second. Turning your question into numbers takes longer than the search."
+- "Real vector databases use indexes like HNSW." True. This is still brute force, and at personal scale that's fine: 23 ms for 50,000 notes. sqlite-vec added its first approximate index, DiskANN, this spring, still in alpha.
 
 ### Stop 6 · The web worker (¾ min)
 

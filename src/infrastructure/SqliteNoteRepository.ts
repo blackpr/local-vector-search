@@ -472,22 +472,34 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     if (!this.db) throw new Error('Database not initialized');
     if (!queryEmbedding) throw new Error('Query embedding is required');
 
+    // sqlite-vec's KNN query: still a brute-force scan, but done inside vec0 in
+    // optimized chunks, 15-26x faster than calling vec_distance_L2 on every row.
+    // vec0 can't see deleted_at, so ask for enough neighbours to fill this page
+    // even if every note in the trash is among them. 4096 is sqlite-vec's max k.
+    const trashed: number = this.db.selectValue('SELECT count(*) FROM notes WHERE deleted_at IS NOT NULL');
+    const k = Math.min(offset + limit + trashed, 4096);
+
     const sql = `
-      SELECT 
+      WITH knn AS (
+        SELECT rowid, distance
+        FROM vec_notes
+        WHERE embedding MATCH ? AND k = ?
+      )
+      SELECT
         notes.rowid as id,
         notes.uuid,
-        notes.text, 
-        notes.category, 
+        notes.text,
+        notes.category,
         notes.tags,
         notes.is_pinned,
         notes.created_at,
         notes.updated_at,
         notes.deleted_at,
-        vec_distance_L2(vec_notes.embedding, ?) as distance 
-      FROM vec_notes 
-      LEFT JOIN notes ON vec_notes.rowid = notes.rowid
+        knn.distance
+      FROM knn
+      JOIN notes ON notes.rowid = knn.rowid
       WHERE notes.deleted_at IS NULL
-      ORDER BY distance ASC 
+      ORDER BY knn.distance ASC
       LIMIT ? OFFSET ?
     `;
 
@@ -495,7 +507,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
     const results: SearchResult[] = [];
 
     try {
-      stmt.bind([this.toSqliteBlob(queryEmbedding), limit, offset]);
+      stmt.bind([this.toSqliteBlob(queryEmbedding), k, limit, offset]);
       while (stmt.step()) {
         const row = stmt.get({}) as any;
         if (row.distance < 1.0) {

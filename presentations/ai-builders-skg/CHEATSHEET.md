@@ -86,8 +86,9 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 ## sqlite-vec
 
 - **30 seconds:** Alex Garcia's SQLite extension for vectors. Pure C, no dependencies, runs anywhere SQLite runs including WASM. Gives `vec0` virtual tables and functions like `vec_distance_L2`, `vec_distance_cosine`.
-- **How we use it:** `vec_notes` table (`embedding float[768]`), rowid matches `notes.rowid`. Search = join + `vec_distance_L2` + `ORDER BY`.
-- **Gotcha 1:** we do a manual full scan with a scalar function. The idiomatic KNN form is `WHERE embedding MATCH ? AND k = 20`, which lets vec0 do the work in optimized chunks. Both are brute force; sqlite-vec has no ANN index like HNSW. Fine for thousands of notes. **VERIFY** current ANN status if asked.
+- **How we use it:** `vec_notes` table (`embedding float[768]`), rowid matches `notes.rowid`. Search = sqlite-vec's KNN query (`WHERE embedding MATCH ? AND k = ?`), then a join to `notes`.
+- **Gotcha 1, fixed 9 Oct:** the app used to compute `vec_distance_L2` on every row and sort. sqlite-vec's KNN form (`WHERE embedding MATCH ? AND k = 20`) does the same brute-force work in optimized chunks. Measured 9 Oct on Tim's Mac with the app's own build (SQLite 3.45.3 + sqlite-vec v0.1.7-alpha.2), in memory, 768 dimensions, top 20: **1k notes 13 ms vs 0.9 ms · 10k 114 ms vs 4.7 ms · 50k 587 ms vs 23 ms**. 15–26× faster, identical top 20 every time. Now switched. KNN can't see `deleted_at`, so the code asks for `k = offset + limit + (notes in the trash)`, capped at 4096 (sqlite-vec's max). Tested against the old query: 192 comparisons, identical notes and distances, including with a third of the notes trashed and on pages 2 and 3. Checked in the real app too: the round 1 questions, London, COOP and deleting a note all behave.
+- **ANN status (verified 9 Oct 2026):** sqlite-vec v0.1.10-alpha (March–May 2026) added the first approximate indexes: DiskANN, "rescore", and an experimental IVF. Still alpha: the latest stable, v0.1.9, is brute force only, and the tracking issue (asg017/sqlite-vec#25) is open. The author's own line: brute force slows down past about a million vectors with large dimensions. Our vendored build (v0.1.7-alpha.2, Jan 2025) also predates v0.1.7's proper DELETE support (deleted vectors now free their space) and some fuzz-found memory fixes. Newer browser builds are on npm as `sqlite-vec-wasm-demo` (0.1.9 and the 0.1.10 alphas).
 - **Gotcha 2, the math nugget:** vectors are normalized, so L2 and cosine are linked: `d² = 2 − 2·cos`. Our cutoff `distance < 1.0` means cosine similarity > 0.5. And the UI's "match %" `(1 − d)·100` is pessimistic: d = 0.8 shows "20% match" while cosine is 0.68.
 - **Why not a vector DB (Pinecone, Qdrant, Chroma)?** Those are servers. The point is no server.
 
@@ -129,7 +130,7 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 
 ## Hard questions, short answers
 
-- **"How many notes before it's slow?"** "I haven't measured. Brute force over 768 floats is cheap; I'd guess tens of thousands are fine. Measuring is on the list." Don't invent a number.
+- **"How many notes before it's slow?"** Measured (see sqlite-vec above): 50,000 notes take 23 ms per search with the KNN query the app now uses (587 ms with the first version). Embedding the question (~90 ms on the CPU) costs more than searching. Caveat: measured in memory; a big database on OPFS also pays for disk reads, which I didn't measure.
 - **"Is it really private?"** Notes and queries never leave the device. First load fetches app files from Vercel and models from Hugging Face, so those two see an IP address, nothing else.
 - **"Why a browser and not Electron/Tauri?"** Zero install, one URL, and the point was to find out how far a tab can go.
 - **"Where's the agent?"** There isn't one yet. This is the memory/retrieval tool an agent would call. Keep retrieval local, and think hard before sending retrieved notes to a remote LLM, because that moves the privacy boundary.

@@ -136,7 +136,9 @@ A SQLite extension by Alex Garcia: a vector column type, plus functions that mea
 
 Vector search is a `SELECT`.
 
-[The query](../../src/infrastructure/SqliteNoteRepository.ts#L486) · [the cutoff](../../src/infrastructure/SqliteNoteRepository.ts#L501)
+[The query](../../src/infrastructure/SqliteNoteRepository.ts#L486) · [the cutoff](../../src/infrastructure/SqliteNoteRepository.ts#L513)
+
+First version: the distance to every row, computed by hand, 587 ms at 50,000 notes. Now sqlite-vec's own nearest-neighbour search: 23 ms. Same results.
 
 And the "87% match" badge? [`(1 - distance) * 100`](../../src/presentation/components/NoteList.tsx#L83)
 

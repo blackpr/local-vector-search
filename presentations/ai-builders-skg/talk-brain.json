@@ -170,6 +170,20 @@
     "updatedAt": "2026-10-06T18:02:36.440Z"
   },
   {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000038",
+    "text": "What are COOP and COEP, and what does Spectre have to do with them? COOP and COEP are two HTTP headers that make a page \"cross-origin isolated\". COOP (Cross-Origin-Opener-Policy: same-origin) cuts the link to windows from other sites, so a popup from another site can't share my page's process. COEP (Cross-Origin-Embedder-Policy: require-corp) means my page only loads files from other sites that explicitly allow it, so no other site's data ends up in my page's memory without its consent. Spectre is the 2018 CPU security flaw that lets code read memory it shouldn't by timing the processor very precisely. SharedArrayBuffer can be turned into exactly that kind of precise timer, so browsers switched it off and now only give it to isolated pages, where there's nothing foreign in memory to steal. Latent needs SharedArrayBuffer for SQLite's OPFS driver. Bonus: on an isolated page the model also runs on several CPU threads, 90 ms per note on my Mac instead of 296 ms.",
+    "category": "stack",
+    "tags": [
+      "coop",
+      "coep",
+      "spectre",
+      "sharedarraybuffer"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-10-09T13:00:00.000Z",
+    "updatedAt": "2026-10-09T13:00:00.000Z"
+  },
+  {
     "uuid": "a1b2c3d4-0000-4000-8000-000000000015",
     "text": "coi-serviceworker is a hack for static hosts like GitHub Pages that cannot send custom headers. A small service worker intercepts the page's own responses, adds the COOP and COEP headers, and reloads the page once. After that the page counts as cross-origin isolated and SharedArrayBuffer works.",
     "category": "stack",
@@ -277,7 +291,7 @@
   },
   {
     "uuid": "a1b2c3d4-0000-4000-8000-000000000024",
-    "text": "How many notes can it handle? I have not measured it. Search is brute force over 768-float vectors, which is cheap, so I would guess tens of thousands of notes are fine on a laptop. Beyond that you would want the vec0 KNN query form, smaller vectors (EmbeddingGemma supports truncating to 256 dimensions), or an approximate index.",
+    "text": "How many notes can it handle? I measured it on my Mac with the app's own SQLite build, in memory. Search uses sqlite-vec's built-in nearest-neighbour query: about 1 ms for 1,000 notes, 5 ms for 10,000 and 23 ms for 50,000. My first version computed the distance to every note by hand and then sorted: 13 ms, 114 ms and 590 ms, same results. It's still brute force, and turning the question into numbers (about 0.1 s) costs more than the search itself. Beyond that: smaller vectors (EmbeddingGemma can truncate to 256 dimensions) or an approximate index, which sqlite-vec is adding as DiskANN, still in alpha.",
     "category": "stack",
     "tags": [
       "scale",
@@ -285,7 +299,7 @@
     ],
     "isPinned": false,
     "createdAt": "2026-09-19T10:00:00.000Z",
-    "updatedAt": "2026-10-06T18:02:36.440Z"
+    "updatedAt": "2026-10-09T17:00:00.000Z"
   },
   {
     "uuid": "a1b2c3d4-0000-4000-8000-000000000025",
