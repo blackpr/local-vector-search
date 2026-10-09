@@ -30,7 +30,7 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 - **WASM:** a compact binary format browsers run at near-native speed. Lets C/C++/Rust code (SQLite, ONNX Runtime) run in a tab. CPU only.
 - **WebGPU:** the modern browser API for the GPU, successor to WebGL, designed for compute as well as graphics. This is what makes model inference in a browser fast.
 - **Q: "Does it work on Safari/Firefox?"** WASM path works everywhere. WebGPU support is uneven. Say which browser you tested in.
-- **The startup exam (good story):** q4 weights on WASM are correct; on a real Mac GPU they returned junk, silently: every note the same distance from every query, UI looked fine. Headless tests have no GPU, so it was never caught. Now `TransformersVectorService.initialize()` asks the browser for a GPU adapter, loads there if one exists, embeds "pasta with garlic…" vs "something quick for dinner" vs "kubernetes pod keeps restarting", and requires the related pair to be clearly closer (gap > 0.08; WASM gives ~0.27). Fails → dispose, reload on WASM. Console prints `Vector model sanity check: gap = …` and `Vector model: q4 on webgpu|wasm`.
+- **The startup exam (good story):** q4 weights on WASM are correct; on a real Mac GPU they returned junk, silently: every note the same distance from every query, UI looked fine. Headless tests have no GPU, so it was never caught. Now `TransformersVectorService.initialize()` asks the browser for a GPU adapter, loads there if one exists, embeds "pasta with garlic…" vs "something quick for dinner" vs "kubernetes pod keeps restarting", and requires the related pair to be clearly closer (gap > 0.08; WASM gives ~0.25). Fails → dispose, reload on WASM. Console prints `Vector model sanity check: gap = …` and `Vector model: q4 on webgpu|wasm`.
 - **Trap inside the trap:** Transformers.js keeps the first session promise it ever made in a worker (`wasmInitPromise`). If the first load throws, every later load in that worker throws the same error. That's why the code checks for a GPU adapter *before* trying WebGPU instead of try/catch.
 
 ## EmbeddingGemma (onnx-community/embeddinggemma-300m-ONNX)
@@ -48,8 +48,8 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 
 - **30 seconds:** an embedding model can't write words, but it can measure them. Every word and two-word phrase in the note is a candidate tag. Embed the note, embed every candidate, keep the candidates closest to the note. The words nearest to the whole note's meaning are its tags. The technique is called KeyBERT.
 - **Steps in the code** (`EmbeddingTaggingService.ts`, candidates in `domain/KeyphraseCandidates.ts`):
-  1. Split the note at punctuation, take 1- and 2-word phrases, drop ones that start or end with a stop word (English + Greek list) or are just numbers. Max 48.
-  2. Embed the note alone, then the candidates in batches of 16, using EmbeddingGemma's `task: clustering` prompt (the one meant for "put similar texts close together"). Cosine similarity note vs candidate = score.
+  1. Split the note at punctuation, take 1- and 2-word phrases, drop ones that start or end with a stop word (English + Greek list) or are just numbers. Max 32.
+  2. Embed the note alone, then the candidates one at a time, using EmbeddingGemma's `task: clustering` prompt (the one meant for "put similar texts close together"). Cosine similarity note vs candidate = score.
   3. A two-word phrase only survives if it scores higher than both of its words ("vector search" beats "vector" and "search"; "called quantization" loses to "quantization").
   4. Pick 5 with MMR (maximal marginal relevance): each pick balances "close to the note" against "different from what's already picked", so you don't get sqlite, sqlite wasm, real sqlite.
   5. Merge with manual `#hashtags`.
@@ -60,7 +60,7 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 
 ## SQLite WASM
 
-- **30 seconds:** the real SQLite C source compiled to WebAssembly, officially supported by the SQLite team. Full SQL in the tab. Our `sqlite3.wasm` is 5.9 MB, vendored in `src/vendor/` because it's a custom build with sqlite-vec compiled in.
+- **30 seconds:** the real SQLite C source compiled to WebAssembly, officially supported by the SQLite team. Full SQL in the tab. Our `sqlite3.wasm` is 5.6 MB as `ls -lh` shows it (5.9 million bytes), vendored in `src/vendor/`. It's the WASM build from sqlite-vec's own release pipeline: SQLite 3.45.3 + sqlite-vec 0.1.7-alpha.2, January 2025. Extensions can't be loaded into SQLite WASM at runtime, so they have to be compiled in.
 - **Why not IndexedDB?** Key-value store, no SQL, no joins, no vector functions, clumsy API.
 - **Why not PGlite (Postgres in WASM) + pgvector?** Valid alternative. SQLite is smaller, the DB is a single file you can export, and sqlite-vec was the simplest path.
 - **Why vendored and not npm?** The npm package `@sqlite.org/sqlite-wasm` doesn't include sqlite-vec. (`vite.config.ts` still has a leftover `optimizeDeps.exclude` for it.)
@@ -118,7 +118,7 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 | Embedding model | ~300M params; 197 MB at q4 (was 1235 MB at fp32) |
 | Tagging model | none; the embedding model does it (was LaMini-Flan-T5, ~374 MB at fp32) |
 | First-visit download | 222 MB measured (was ~1.6 GB) |
-| SQLite WASM | 5.9 MB |
+| SQLite WASM | 5.6 MB in `ls -lh` (5.9 million bytes) |
 | Distance cutoff | L2 < 1.0 (= cosine > 0.5) |
 | Soft delete undo | 10 s |
 | Cold start offline (headless test) | ready in ~5 s |

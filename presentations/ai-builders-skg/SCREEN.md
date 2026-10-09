@@ -79,7 +79,7 @@ The whole model integration: [one file](../../src/infrastructure/TransformersVec
 
 Text in → **768 numbers** out. 300M parameters. 100+ languages.
 
-It has rules: [queries and notes get different prefixes](../../src/infrastructure/TransformersVectorService.ts#L98)
+It has rules: [queries and notes get different prefixes](../../src/infrastructure/TransformersVectorService.ts#L18)
 
 Forget them → nothing crashes → results quietly get worse.
 
@@ -93,20 +93,24 @@ embed the note + every candidate
 closest candidates       →  the tags
 ```
 
-It can't write words. It can *measure* them. [The code](../../src/infrastructure/EmbeddingTaggingService.ts#L32)
+It can't write words. It can *measure* them. [The code](../../src/infrastructure/EmbeddingTaggingService.ts#L12)
 
 &nbsp;
 
 ## Stop 3 · SQLite, compiled to WebAssembly
 
-The real SQLite. Joins, indexes, transactions. In a tab.
+The real SQLite, built for the browser by the SQLite team. Joins, indexes, transactions. In a tab.
 
 ```
-$ ls -lh public/assets/sqlite3.wasm
-5.9M
+$ ls -lh src/vendor
+sqlite3-opfs-async-proxy.js   21K
+sqlite3.mjs                  699K
+sqlite3.wasm                 5.6M
 ```
 
 A database engine smaller than most hero images.
+
+[Notes and vectors, one file](../../src/infrastructure/SqliteNoteRepository.ts#L16)
 
 &nbsp;
 
@@ -122,11 +126,13 @@ I want my notes to survive a refresh
                            └─ so a service worker fakes them
 ```
 
-[vite.config.ts](../../vite.config.ts#L12) · [vercel.json](../../vercel.json) · [the hack](../../index.html#L11)
+[Where it lands](../../src/infrastructure/DatabaseFactories.ts#L18) · [vite.config.ts](../../vite.config.ts#L12) · [vercel.json](../../vercel.json) · [the hack](../../index.html#L11)
 
 &nbsp;
 
 ## Stop 5 · sqlite-vec
+
+A SQLite extension by Alex Garcia: a vector column type, plus functions that measure distance.
 
 Vector search is a `SELECT`.
 
@@ -145,6 +151,8 @@ A 300M-parameter model on the main thread freezes every button.
 In a worker, the UI never notices.
 
 The price: [everything becomes messages](../../src/presentation/worker/WorkerMessages.ts).
+
+[React sends](../../src/hooks/useWorker.ts#L116) → [the worker answers](../../src/app.worker.ts#L148)
 
 &nbsp;
 
