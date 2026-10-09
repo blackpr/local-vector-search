@@ -51,7 +51,7 @@ So I wrote it down. In the app.
 
 your question → **768 numbers** → nearest notes → back to the screen
 
-[useWorker.ts](../../src/hooks/useWorker.ts#L26) · [app.worker.ts](../../src/app.worker.ts#L102)
+[useWorker.ts](../../src/hooks/useWorker.ts#L39) · [app.worker.ts](../../src/app.worker.ts#L102)
 
 &nbsp;
 
@@ -154,7 +154,7 @@ In a worker, the UI never notices.
 
 The price: [everything becomes messages](../../src/presentation/worker/WorkerMessages.ts).
 
-[React sends](../../src/hooks/useWorker.ts#L116) → [the worker answers](../../src/app.worker.ts#L148)
+[React sends](../../src/hooks/useWorker.ts#L131) → [the worker answers](../../src/app.worker.ts#L148)
 
 &nbsp;
 
@@ -219,7 +219,7 @@ Not just my Mac: [transformers.js #1728](https://github.com/huggingface/transfor
 | Promise | Kept by |
 | --- | --- |
 | search in an open tab | the model, already in memory |
-| notes survive a restart | OPFS ([and a loud warning when it's missing](../../src/App.tsx#L258)) |
+| notes survive a restart | OPFS ([and a loud warning when it's missing](../../src/App.tsx#L274)) |
 | launch with no network | [service worker](../../src/sw.ts#L26) + [cache warm-up](../../src/offline/warmAppCache.ts#L21) |
 
 &nbsp;

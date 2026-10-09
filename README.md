@@ -146,18 +146,27 @@ We've just shipped **33+ major features** transforming this into a production-re
 -   Works across all tabs (All Notes, Search Results, Pinned Notes)
 
 
-## �🚀 Deployment (GitHub Pages)
+## 🚀 Deployment
 
-This project relies on `SharedArrayBuffer`, which requires the page to be "cross-origin isolated". GitHub Pages does not support sending the required headers natively.
+Latent is a static site, but every file must be served with two response headers:
 
-To solve this, we use `coi-serviceworker`, a production-grade polyfill that reloads the page with a Service Worker to inject the headers client-side.
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
 
-1.  Build the project:
-    ```bash
-    npm run build
-    ```
+They make the page "cross-origin isolated". SQLite's OPFS driver needs that (it uses `SharedArrayBuffer`), and it also lets the model's CPU engine use several threads, about 3× faster. Without them the app still runs, but notes live in memory only and an amber "not being saved" banner says so.
 
-2.  Deploy the `dist` folder to GitHub Pages (or use a GH Action).
+### Vercel (what this project uses)
+
+[`vercel.json`](vercel.json) sends both headers (plus `Cross-Origin-Resource-Policy: cross-origin`) for every path and serves `index.html` for any URL. Build command `npm run build`, output directory `dist`. Step by step: [`docs/VERCEL_DEPLOYMENT.md`](docs/VERCEL_DEPLOYMENT.md).
+
+### Other hosts
+
+-   **Netlify, Cloudflare Pages, nginx, …**: set the same two headers for every path, and serve `index.html` for unknown paths.
+-   **Hosts that can't set headers (GitHub Pages)**: `index.html` loads [`coi-serviceworker.js`](public/coi-serviceworker.js), which fakes the headers from a service worker and reloads the page once. It does nothing when the real headers are present, which is the case on Vercel and in `npm run dev`. Untested on a header-less host, and it will probably clash with the app's own service worker (`/sw.js`), because only one service worker can control the site root. Prefer a host that sends the headers.
+
+**Check after deploying:** in the browser console, `crossOriginIsolated` should print `true`, and the app's log should say `Using OPFS storage`.
 
 ## 🧠 Technical Details
 
@@ -214,7 +223,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed architectural do
 ### Storage & Database
 -   **SQLite WASM**: Full SQL database running in the browser
 -   **OPFS**: Origin Private File System for persistent storage (`/notes.db`)
--   **sqlite-vec**: Vector extension for L2 distance calculations
+-   **sqlite-vec**: Vector extension. Search uses its KNN query (`MATCH … AND k = ?`): brute force, about 23 ms for 50,000 notes
 -   **Production Indexes**: Optimized indexes on `deletedAt`, `isPinned`, `category`, and `tags`
 -   **Soft Delete**: Notes marked as deleted can be restored within 10 seconds
 
@@ -222,6 +231,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for detailed architectural do
 -   **URL Synchronization**: Application state (tab, query, filters, pagination, selected note) synced to URL
 -   **Deep Linking**: Share URLs that restore exact application state
 -   **React Hooks**: Custom hooks (`useWorker`, `useUrlSync`) for clean state management
+-   **Several browser tabs**: tabs share the database and tell each other about changes over a `BroadcastChannel`, so a delete or edit in one tab shows up in the others
 
 ### Styling
 -   **Tailwind CSS v4**: Using the new `@theme` directive and modern engine

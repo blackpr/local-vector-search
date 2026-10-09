@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { ArrowLeft, Trash2, Tag, Edit2, Eye, X, Loader2 } from 'lucide-react';
 import { ConfirmationModal } from './ConfirmationModal';
@@ -25,8 +25,14 @@ export function NoteDetail({ note, onBack, onDelete, onSave, onAutoTags }: NoteD
   const [isProcessingTags, setIsProcessingTags] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  // Sync state if note prop updates
+  // Sync state if note prop updates, but never throw away an edit in progress:
+  // the note can change in another tab while you type here.
+  const isEditingRef = useRef(isEditing);
   useEffect(() => {
+    isEditingRef.current = isEditing;
+  }, [isEditing]);
+  useEffect(() => {
+    if (isEditingRef.current) return;
     setText(note.text);
     setTags(note.tags || []);
   }, [note]);

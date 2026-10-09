@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { WorkerResponse } from '../presentation/worker/WorkerMessages';
 
+// Every tab has its own worker, but they all share one database file. After a
+// write, this tab tells the others; they bump dataVersion and re-run whatever
+// they show. A BroadcastChannel never receives its own messages.
+const CHANGES_CHANNEL = 'latent-db-changes';
+const WRITE_RESPONSES = new Set<WorkerResponse['type']>([
+  'NOTE_ADDED', 'NOTE_UPDATED', 'NOTE_DELETED', 'NOTE_RESTORED',
+  'CATEGORY_ADDED', 'CATEGORY_DELETED', 'IMPORT_RESULT', 'IMPORT_DB_RESULT',
+]);
+
 export function useWorker() {
   const workerRef = useRef<Worker | null>(null);
   const [status, setStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
@@ -11,6 +20,7 @@ export function useWorker() {
   const [isIndexing, setIsIndexing] = useState(false);
   const [storageMode, setStorageMode] = useState<'opfs' | 'memory' | null>(null);
   const [progress, setProgress] = useState<{ file: string; progress: number; loaded: number; total: number } | null>(null);
+  const [dataVersion, setDataVersion] = useState(0);
 
   useEffect(() => {
     let worker: Worker | null = null;
@@ -18,6 +28,9 @@ export function useWorker() {
     // first cleanup has already run, so without this flag two workers would
     // start, both load the model, and both stay alive.
     let cancelled = false;
+
+    const changes = typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel(CHANGES_CHANNEL) : null;
+    if (changes) changes.onmessage = () => setDataVersion((v) => v + 1);
 
     // Use Vite's ?worker suffix for proper TypeScript worker handling
     // This ensures the worker is compiled to .js with correct MIME type
@@ -29,6 +42,7 @@ export function useWorker() {
 
       worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
         const { type } = e.data;
+        if (WRITE_RESPONSES.has(type)) changes?.postMessage(type);
 
         if (e.data.type === 'READY') {
           setStorageMode(e.data.storage);
@@ -89,6 +103,7 @@ export function useWorker() {
     return () => {
       cancelled = true;
       worker?.terminate();
+      changes?.close();
     };
   }, []);
 
@@ -249,7 +264,7 @@ export function useWorker() {
   }, []);
 
   const getNote = useCallback((id: number) => {
-    return new Promise<{ id: number; text: string; category: string; created_at: string; tags: string[] } | null>((resolve) => {
+    return new Promise<{ id: number; text: string; category: string; created_at: string; tags: string[]; isPinned?: boolean } | null>((resolve) => {
       if (!workerRef.current) return resolve(null);
       const handler = (e: MessageEvent<WorkerResponse>) => {
         if (e.data.type === 'NOTE_FOUND') {
@@ -262,5 +277,5 @@ export function useWorker() {
     });
   }, []);
 
-  return { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
+  return { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, dataVersion, exportNotes, exportDatabase, importNotes, importDatabase, suggestCategory, generateTags, getNote };
 }

@@ -232,6 +232,19 @@
     "updatedAt": "2026-10-06T18:02:36.440Z"
   },
   {
+    "uuid": "a1b2c3d4-0000-4000-8000-000000000039",
+    "text": "What happens if I open Latent in two tabs, and how does the other tab refresh? Each tab runs its own web worker with its own copy of the model, but they share the same database file in OPFS. When one tab adds, edits or deletes a note, it announces it on a BroadcastChannel, the browser's built-in way for tabs of the same site to message each other. The other tabs hear it and simply re-run what they show: the list, the current search, the open note. Nothing is re-embedded: each note's vector is computed once by the tab that saved it, and a refreshed search reuses the vector of the question it already asked. If you edit the same note in two tabs, the last save wins. The cost: every tab loads its own copy of the model, about 200 MB of memory.",
+    "category": "stack",
+    "tags": [
+      "tabs",
+      "broadcastchannel",
+      "worker"
+    ],
+    "isPinned": false,
+    "createdAt": "2026-10-09T14:18:00.000Z",
+    "updatedAt": "2026-10-09T14:18:00.000Z"
+  },
+  {
     "uuid": "a1b2c3d4-0000-4000-8000-000000000019",
     "text": "The service worker is a programmable network proxy that sits between the page and the internet and survives closing the tab. Mine caches the app shell: the HTML, JavaScript, sqlite3.wasm and the ONNX runtime, network first with the cache as fallback. The model files are cached separately by Transformers.js itself. It has nothing to do with the web worker: same word, different job.",
     "category": "stack",

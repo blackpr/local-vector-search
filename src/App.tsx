@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useWorker } from './hooks/useWorker';
 import { useUrlSync } from './hooks/useUrlSync';
 import { NoteDetail } from './presentation/components/NoteDetail';
@@ -13,7 +13,7 @@ import { NoteListView } from './presentation/views/NoteListView';
 import { AddNoteView } from './presentation/views/AddNoteView';
 
 function App() {
-    const { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, exportNotes, importNotes, exportDatabase, importDatabase, generateTags, getNote } = useWorker();
+    const { status, storageMode, error, searchResults, allNotes, categories, addNote, search, listNotes, deleteNote, restoreNote, updateNote, listCategories, addCategory, deleteCategory, isIndexing, progress, dataVersion, exportNotes, importNotes, exportDatabase, importDatabase, generateTags, getNote } = useWorker();
 
     // UI State
     const [query, setQuery] = useState('');
@@ -59,14 +59,14 @@ function App() {
         getNote
     });
 
-    // Debounce search
+    // Debounce search (dataVersion: another tab changed the notes, so search again)
     useEffect(() => {
         if (!isUrlInitialized) return;
         const timer = setTimeout(() => {
             search(query, LIMIT, offset);
         }, 300);
         return () => clearTimeout(timer);
-    }, [query, offset, search, isUrlInitialized]);
+    }, [query, offset, search, isUrlInitialized, dataVersion]);
 
     // Initial Load & Tab Change
     useEffect(() => {
@@ -79,7 +79,23 @@ function App() {
         }
         // Load categories on start
         listCategories();
-    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, filterTag, isUrlInitialized, offset]);
+    }, [activeTab, listNotes, listCategories, isIndexing, filterCategory, filterTag, isUrlInitialized, offset, dataVersion]);
+
+    // Another tab changed the notes: reload the open one, or close it if it was
+    // deleted there. Only replace it when it really changed, because NoteDetail
+    // resets its text whenever the note object changes.
+    const seenDataVersion = useRef(dataVersion);
+    useEffect(() => {
+        if (dataVersion === seenDataVersion.current) return;
+        seenDataVersion.current = dataVersion;
+        if (!selectedNote) return;
+        getNote(selectedNote.id).then((fresh) => {
+            if (!fresh) return setSelectedNote(null);
+            const changed = fresh.text !== selectedNote.text || fresh.category !== selectedNote.category
+                || fresh.isPinned !== selectedNote.isPinned || JSON.stringify(fresh.tags ?? []) !== JSON.stringify(selectedNote.tags ?? []);
+            if (changed) setSelectedNote(fresh);
+        });
+    }, [dataVersion, selectedNote, getNote]);
 
     // Handlers
     const handleLoadMore = () => {

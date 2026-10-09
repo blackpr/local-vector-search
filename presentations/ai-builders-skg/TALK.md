@@ -7,7 +7,7 @@ About 25 minutes. Everything you need on stage is in this one file, including wh
 
 - **Laptop → projector.** Three windows, switched with `Cmd+Tab`:
   - VS Code: `SCREEN.md` in preview (`Cmd+Shift+V`), zoomed until the back row can read it, Zen mode (`Cmd+K Z`). Code files open from the links in it.
-  - Browser: Latent open, green **System Ready**, the 38 notes from `talk-brain.json` imported, zoom 150%.
+  - Browser: Latent open, green **System Ready**, the 39 notes from `talk-brain.json` imported, zoom 150%.
   - Terminal in the repo, big font. Used once, at stop 3.
 - **iPad:** this file. Nothing else.
 - `CHEATSHEET.md` is homework for the week before, not for the stage. The questions you're likely to get are in the **IF ASKED** lines below.
@@ -73,7 +73,7 @@ If the room is shy, these all passed testing:
 **SAY** Two things are called "worker" and have nothing in common. The web worker computes. The service worker is a network proxy that keeps the app available offline. (Point at the service worker box: it's not part of a search at all.)
 
 **IF ASKED** about the two links under the diagram:
-- `useWorker.ts:26`, `worker = new WorkerModule.default()`. That line starts the second thread. Line 24 loads the worker file; the `?worker` on its name tells Vite to package it as a separate script.
+- `useWorker.ts:39`, `worker = new WorkerModule.default()`. That line starts the second thread. Line 37 loads the worker file; the `?worker` on its name tells Vite to package it as a separate script.
 - `app.worker.ts:102`, lines 102-114. Every part of the app being built, each handed the pieces it needs, e.g. `new SearchNotesUseCase(noteRepository, vectorService)`. No framework, just constructors called in order.
 
 ## 3 · The tour (8 min)
@@ -372,13 +372,13 @@ What the distances mean (all vectors have length 1):
 
 **COST** Everything becomes messages.
 
-**ON SCREEN** `useWorker.ts:116` (React side)
+**ON SCREEN** `useWorker.ts:131` (React side)
 
 ```ts
 workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset } });
 ```
 
-**WHAT IT DOES** Sends the question to the worker, and that's it: the function returns nothing. The answer arrives later in a separate message handler (line 30), whose `SEARCH_RESULTS` branch (lines 51-52) puts the results into React state, and React redraws the list. Questions shorter than 2 characters never get sent (line 112).
+**WHAT IT DOES** Sends the question to the worker, and that's it: the function returns nothing. The answer arrives later in a separate message handler (line 43), whose `SEARCH_RESULTS` branch (lines 65-66) puts the results into React state, and React redraws the list. Questions shorter than 2 characters never get sent (line 127).
 
 **SAY** "React never calls search. It sends a message."
 
@@ -392,7 +392,7 @@ workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset
   self.postMessage({ type: 'SEARCH_RESULTS', results: ... });   // 160
 ```
 
-**WHAT IT DOES** Every message from the page lands in one handler (line 137), and a long `if / else if` on `type` picks what to do. For `'SEARCH'`: embed the question, run the SQL from stop 5, send the results back. It's all inside a `try / catch`, so any error goes back to the page as an `ERROR` message instead of vanishing.
+**WHAT IT DOES** Every message from the page lands in one handler (line 137), and a long `if / else if` on `type` picks what to do. For `'SEARCH'`: embed the question (or reuse its vector if it's the same question as last time), run the SQL from stop 5, send the results back. It's all inside a `try / catch`, so any error goes back to the page as an `ERROR` message instead of vanishing.
 
 **SAY** "The worker gets the message, embeds the question, asks SQLite, and sends the answer back as another message."
 
@@ -402,7 +402,7 @@ workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset
 
 **SAY** "17 messages in, 19 out. It's a small API between my UI and my backend, and the backend is in the same tab."
 
-**IF ASKED** "Is this the service worker?" No. The web worker computes; the service worker is the network proxy that keeps the app working offline. "How is it wired?" `app.worker.ts` lines 102-114 build every piece with plain constructors, no framework.
+**IF ASKED** "Is this the service worker?" No. The web worker computes; the service worker is the network proxy that keeps the app working offline. "How is it wired?" `app.worker.ts` lines 102-114 build every piece with plain constructors, no framework. "What if I open two tabs?" Search it: `what if I open two tabs`. Or say it: each tab gets its own worker and its own copy of the model, but they share the database file. After a save, the tab announces it on a BroadcastChannel (the browser's built-in tab-to-tab messaging) and the other tabs refresh what they show. Nothing gets re-embedded: notes are embedded once by the tab that saves them, and a refreshed search reuses the question's vector.
 
 Back to SCREEN.md, scroll to section 4.
 
@@ -505,7 +505,7 @@ return gap > SANITY_MIN_GAP;   // 0.08
 
 **SAY** Warm tab, surviving a restart, cold launch. I had the first, mostly the second (it silently fell back to RAM when OPFS was missing, now it warns), and not the third: I cached a gigabyte of model and forgot 300 KB of JavaScript. Now it cold-starts with the server dead and the network cut.
 
-**ON SCREEN** `App.tsx:258`
+**ON SCREEN** `App.tsx:274`
 
 ```tsx
 {storageMode === 'memory' && (
@@ -545,8 +545,9 @@ No code. Read the three lines. Then the two "next" lines:
 6. Nothing runs while you type any more. Add: Save does tags + embedding + write. Edit: Save re-embeds if the text changed; "Suggest tags" is a button you press if you want new tags.
 7. Fonts: browser 150%, VS Code preview zoomed, terminal font big. Open the terminal in the repo and run `ls -lh src/vendor` once, so on stage it's one `↑` away.
 8. Click every code link in SCREEN.md once. Each should open on the line this file names under **ON SCREEN**.
-9. Expect the console to say `Vector model: q4 on wasm` on your Mac: the GPU fails the exam (the known bug, story 2). Measured in a test page on this Mac: about 0.1 s to turn a question into numbers on the CPU, about 1 s for the 30 tag words on Save. If search feels much slower than that in the app, check the console.
-10. iPad: open this file in whatever app you'll use on stage, check it works with the iPad offline, turn auto-lock off, and scroll it end to end once.
+9. Keep one tab of the app open on stage. Each tab loads its own copy of the model (~200 MB of memory), and they'd compete for the CPU at startup.
+10. Expect the console to say `Vector model: q4 on wasm` on your Mac: the GPU fails the exam (the known bug, story 2). Measured in a test page on this Mac: about 0.1 s to turn a question into numbers on the CPU, about 1 s for the 30 tag words on Save. If search feels much slower than that in the app, check the console.
+11. iPad: open this file in whatever app you'll use on stage, check it works with the iPad offline, turn auto-lock off, and scroll it end to end once.
 
 ---
 

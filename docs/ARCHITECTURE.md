@@ -39,7 +39,7 @@ const taggingService = new EmbeddingTaggingService(vectorService);
 const noteRepository = new SqliteNoteRepository(db);
 
 // 2. Inject into Application (Use Cases)
-const addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService, taggingService); // tags + embed + save on Save
+const addNoteUseCase = new AddNoteUseCase(noteRepository, noteRepository, vectorService, taggingService); // tags + embed + save on Save (the repository is also the SearchService)
 const updateNoteUseCase = new UpdateNoteUseCase(noteRepository, vectorService); // re-embeds on text change
 const searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
 ```
@@ -51,11 +51,18 @@ To ensure a "jank-free" experience (60fps), all heavy lifting (AI inference, Vec
 -   The **Worker Thread** handles logic.
 -   Communication happens via a strongly-typed message passing system (`WorkerMessage`, `WorkerResponse`).
 -   A separate **Service Worker** (`src/sw.ts`) caches the app shell so the app cold-starts offline. Model files are cached by Transformers.js itself.
+-   **Several tabs**: each tab runs its own worker (and its own copy of the model) against the same OPFS database. After a write, `useWorker` posts on a `BroadcastChannel` (`latent-db-changes`); the other tabs bump `dataVersion` and re-run their current list, search and open note. Nothing is re-embedded: `SearchNotesUseCase` reuses the vector of the last question.
 
 ### 4. Derived Data Rules
 -   A note's vector is derived from its text. `UpdateNoteUseCase` recomputes it when the text changes, and the repository writes text and vector in one transaction.
 -   Vectors are only comparable with vectors from the same model and weight precision, so the database stores an `embedding_version`. `ReindexNotesUseCase` re-embeds everything once when it changes.
 -   The embedding model runs a two-sentence sanity check after loading and falls back from WebGPU to WASM if the output is degenerate.
+
+### 5. Search
+-   Search is sqlite-vec's KNN query (`WHERE embedding MATCH ? AND k = ?` on the `vec0` table), joined to `notes`. It is brute force (no ANN index), done inside sqlite-vec in optimized chunks: about 23 ms for 50,000 notes on an M4 Pro, versus 587 ms when computing `vec_distance_L2` on every row.
+-   `vec0` can't see `deleted_at`, so `k = offset + limit + (notes in the trash)`, capped at 4096 (sqlite-vec's maximum). That keeps every page identical to a full scan.
+-   Results at L2 distance 1.0 or more (cosine similarity 0.5 or less) are dropped.
+-   Timestamps are stored as ISO 8601 UTC (`2026-10-09T13:00:00.000Z`) everywhere; older rows with SQLite's `CURRENT_TIMESTAMP` format are converted once at startup, because lists sort by `created_at` as text.
 
 ## Directory Structure
 ```
