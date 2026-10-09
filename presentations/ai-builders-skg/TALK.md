@@ -300,26 +300,26 @@ Then the three links under the chain, a few seconds each:
 
 **COST** It's pre-1.0 (my build is an alpha), and there's no index: every search measures the distance to every note. For one person's notes that's instant.
 
-**ON SCREEN** `SqliteNoteRepository.ts:486`
+**ON SCREEN** `SqliteNoteRepository.ts:495`
 
 ```sql
 WITH knn AS (
   SELECT rowid, distance
   FROM vec_notes
-  WHERE embedding MATCH ? AND k = ?          -- 486
+  WHERE embedding MATCH ? AND k = ?          -- 495
 )
 SELECT notes.rowid as id, notes.text, ... , knn.distance
 FROM knn
-JOIN notes ON notes.rowid = knn.rowid       -- 500
+JOIN notes ON notes.rowid = knn.rowid       -- 509
 WHERE notes.deleted_at IS NULL
-ORDER BY knn.distance ASC                   -- 502
+ORDER BY knn.distance ASC                   -- 511
 LIMIT ? OFFSET ?
 ```
 
 and a few lines down:
 
 ```ts
-if (row.distance < 1.0) {                    // 513
+if (row.distance < 1.0) {                    // 522
 ```
 
 **WHAT IT DOES** (read the SQL in this order)
@@ -329,9 +329,9 @@ if (row.distance < 1.0) {                    // 513
 4. `WHERE deleted_at IS NULL`: skip notes in the trash.
 5. `ORDER BY knn.distance ASC`: closest first.
 6. `LIMIT ? OFFSET ?`: one page of 20.
-7. Then in JavaScript, line 513: drop anything at distance 1.0 or more. That's why "weather in London" returns nothing.
+7. Then in JavaScript, line 522: drop anything at distance 1.0 or more. That's why "weather in London" returns nothing.
 
-Why `k` isn't simply 20 (lines 479-480, just above): sqlite-vec picks the neighbours before the trash is filtered out. So the code counts the notes in the trash and asks for that many extra, which keeps every page full. Tested against the old query: identical results, including with a third of the notes trashed.
+Why `k` isn't simply 20 (lines 488-489, just above): sqlite-vec picks the neighbours before the trash is filtered out. So the code counts the notes in the trash and asks for that many extra, which keeps every page full. Tested against the old query: identical results, including with a third of the notes trashed.
 
 What the distances mean (all vectors have length 1):
 
@@ -343,9 +343,9 @@ What the distances mean (all vectors have length 1):
 | 2 | opposite |
 
 **SAY**
-- (486, read aloud) "Give me the nearest vectors to my question. That's vector search. It's a WHERE clause."
-- (500-502) "And from there it's plain SQL: join my normal notes table, skip the trash, closest first."
-- (513) "This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0. Nobody told me to."
+- (495, read aloud) "Give me the nearest vectors to my question. That's vector search. It's a WHERE clause."
+- (509-511) "And from there it's plain SQL: join my normal notes table, skip the trash, closest first."
+- (522) "This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0. Nobody told me to."
 - (optional, 15 seconds) "Confession: until this week, this query called the distance function on every single row myself. This is sqlite-vec's own nearest-neighbour search. Same results, 26 times faster at 50,000 notes. Read the docs of the extension you're using."
 
 **ON SCREEN** `NoteList.tsx:83`
@@ -450,7 +450,7 @@ await this.noteRepository.update({ ...note, isPinned }, embedding);   // 29
 
 **WHAT IT DOES** Compare the old text with the new. If it changed, compute a new vector; if not (pinning, re-tagging), skip the model so it stays instant. The vector is computed **before** anything is written: if the model fails, nothing changes, and the old text and old vector still match.
 
-**ON SCREEN** `SqliteNoteRepository.ts:226`
+**ON SCREEN** `SqliteNoteRepository.ts:235`
 
 **WHAT IT DOES** `update()` wraps everything in `this.db.transaction(...)`, meaning all or nothing: update the note's row, and if there's a new vector, replace the old one (delete it, insert the new one; sqlite-vec's tables can't edit a row in place). The old bug: this function updated the text and never touched the vector.
 

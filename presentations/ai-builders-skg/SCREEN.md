@@ -136,7 +136,7 @@ A SQLite extension by Alex Garcia: a vector column type, plus functions that mea
 
 Vector search is a `SELECT`.
 
-[The query](../../src/infrastructure/SqliteNoteRepository.ts#L486) · [the cutoff](../../src/infrastructure/SqliteNoteRepository.ts#L513)
+[The query](../../src/infrastructure/SqliteNoteRepository.ts#L495) · [the cutoff](../../src/infrastructure/SqliteNoteRepository.ts#L522)
 
 First version: the distance to every row, computed by hand, 587 ms at 50,000 notes. Now sqlite-vec's own nearest-neighbour search: 23 ms. Same results.
 
@@ -191,7 +191,7 @@ Edit the text, forget the vector → search finds the *old* note.
 
 Nobody blames the cache. Everybody blames the model.
 
-[re-embed on edit](../../src/application/UpdateNoteUseCase.ts#L21) · [text + vector, one transaction](../../src/infrastructure/SqliteNoteRepository.ts#L226) · [tag vectors with the model that made them](../../src/application/ReindexNotesUseCase.ts#L17)
+[re-embed on edit](../../src/application/UpdateNoteUseCase.ts#L21) · [text + vector, one transaction](../../src/infrastructure/SqliteNoteRepository.ts#L235) · [tag vectors with the model that made them](../../src/application/ReindexNotesUseCase.ts#L17)
 
 &nbsp;
 

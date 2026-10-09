@@ -203,6 +203,7 @@ export function useWorker() {
       const handler = (e: MessageEvent<WorkerResponse>) => {
         if (e.data.type === 'IMPORT_RESULT') {
           workerRef.current?.removeEventListener('message', handler);
+          setIsIndexing(false); // otherwise Save stays "Tagging & saving…" until a reload
           resolve((e.data as any).payload);
         } else if (e.data.type === 'ERROR') {
           workerRef.current?.removeEventListener('message', handler);

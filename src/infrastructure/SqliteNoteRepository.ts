@@ -87,6 +87,15 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       });
     }
 
+    // Notes created in the app used to get SQLite's CURRENT_TIMESTAMP
+    // ('2026-10-09 15:41:07', UTC without a zone), imported ones keep ISO
+    // ('2026-10-09T13:00:00.000Z'). ORDER BY compares them as text, where 'T'
+    // sorts after ' ', and JS reads the zoneless form as local time. Store ISO only.
+    this.db.exec(`
+      UPDATE notes SET created_at = strftime('%Y-%m-%dT%H:%M:%fZ', created_at) WHERE created_at NOT LIKE '%T%';
+      UPDATE notes SET updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', updated_at) WHERE updated_at NOT LIKE '%T%';
+    `);
+
     this.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_notes_uuid ON notes(uuid)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_category_id ON notes(category_id)');
     this.db.exec('CREATE INDEX IF NOT EXISTS idx_notes_created_at ON notes(created_at DESC)');
@@ -196,8 +205,8 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       }
 
       this.db.exec({
-        sql: 'INSERT INTO notes(uuid, text, category, category_id, tags, is_pinned, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        bind: [uuid, note.text, note.category, categoryId, tagsJson, note.isPinned ? 1 : 0, now],
+        sql: 'INSERT INTO notes(uuid, text, category, category_id, tags, is_pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        bind: [uuid, note.text, note.category, categoryId, tagsJson, note.isPinned ? 1 : 0, now, now],
       });
 
       rowId = this.db.selectValue('SELECT last_insert_rowid()');
@@ -218,7 +227,7 @@ export class SqliteNoteRepository implements NoteRepository, SearchService, Cate
       category: note.category,
       tags: note.tags || [],
       isPinned: !!note.isPinned,
-      createdAt: new Date(),
+      createdAt: new Date(now),
       updatedAt: new Date(now),
     };
   }
