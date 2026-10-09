@@ -1,15 +1,23 @@
 import type { Note, NewNote } from '../domain/Note';
 import type { NoteRepository } from '../domain/NoteRepository';
+import type { SearchService } from '../domain/SearchService';
 import type { VectorService } from '../domain/VectorService';
 import type { TaggingSystem } from '../domain/TaggingSystem';
 
 export class AddNoteUseCase {
   private noteRepository: NoteRepository;
+  private searchService: SearchService;
   private vectorService: VectorService;
   private taggingSystem?: TaggingSystem;
 
-  constructor(noteRepository: NoteRepository, vectorService: VectorService, taggingSystem?: TaggingSystem) {
+  constructor(
+    noteRepository: NoteRepository,
+    searchService: SearchService,
+    vectorService: VectorService,
+    taggingSystem?: TaggingSystem,
+  ) {
     this.noteRepository = noteRepository;
+    this.searchService = searchService;
     this.vectorService = vectorService;
     this.taggingSystem = taggingSystem;
   }
@@ -28,30 +36,26 @@ export class AddNoteUseCase {
 
     let finalCategory = category;
     if (!finalCategory || finalCategory.trim() === '') {
-      const searchService = this.noteRepository as any;
-      if (searchService.search) {
-        const similarNotes = await searchService.search(text, 5, embedding);
+      // `embedding` uses the document prefix, not the query prefix normal search
+      // uses. That's fine here: we want notes similar to this note (doc vs doc).
+      const similarNotes = await this.searchService.search(text, 5, 0, embedding);
 
-        const categoryCounts = new Map<string, number>();
-        for (const note of similarNotes) {
-          if (note.category) {
-            categoryCounts.set(note.category, (categoryCounts.get(note.category) || 0) + 1);
-          }
+      const categoryCounts = new Map<string, number>();
+      for (const note of similarNotes) {
+        if (note.category) {
+          categoryCounts.set(note.category, (categoryCounts.get(note.category) || 0) + 1);
         }
-
-        let maxCount = 0;
-        let winner: string | undefined;
-        for (const [cat, count] of categoryCounts.entries()) {
-          if (count > maxCount) {
-            maxCount = count;
-            winner = cat;
-          }
-        }
-        if (winner) finalCategory = winner;
-        else finalCategory = 'Uncategorized';
-      } else {
-        finalCategory = 'Uncategorized';
       }
+
+      let maxCount = 0;
+      let winner: string | undefined;
+      for (const [cat, count] of categoryCounts.entries()) {
+        if (count > maxCount) {
+          maxCount = count;
+          winner = cat;
+        }
+      }
+      finalCategory = winner ?? 'Uncategorized';
     }
 
     const newNote: NewNote = { text, category: finalCategory, tags, uuid: crypto.randomUUID() };

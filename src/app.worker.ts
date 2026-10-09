@@ -99,7 +99,7 @@ async function initialize() {
 
     // 2. Initialize Application Layer (Use Cases)
     // We pass dependencies. implicit dependency injection.
-    addNoteUseCase = new AddNoteUseCase(noteRepository, vectorService, taggingService);
+    addNoteUseCase = new AddNoteUseCase(noteRepository, noteRepository, vectorService, taggingService);
     searchNotesUseCase = new SearchNotesUseCase(noteRepository, vectorService);
     listNotesUseCase = new ListNotesUseCase(noteRepository);
     deleteNoteUseCase = new DeleteNoteUseCase(noteRepository);
