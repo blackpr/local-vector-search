@@ -3,6 +3,18 @@
 **Private. This is the iPad file. The projector shows SCREEN.md.**
 About 25 minutes. Everything you need on stage is in this one file, including what every piece of code you open actually does. There are no links on purpose: a tap on the iPad would take you away from your notes.
 
+**How to read this file**
+
+| Label | Out loud? |
+| --- | --- |
+| **SAY** | Yes. Word for word, or close to it. |
+| **WHAT · WHY HERE · COST** (tour stops) | Yes, briefly and in your own words. They're the three beats printed on screen. |
+| **THE IDEA IN ONE LINE**, **THE ENDING** | Yes. |
+| **DO** | No. Something you do: switch window, type, click. |
+| **ON SCREEN** | No. What the projector shows, so you can match the iPad to the screen. |
+| **WHAT IT DOES** | No. Background for you, so you know what you're pointing at and can answer questions. |
+| **IF ASKED** | Only if someone asks. |
+
 ## Setup on stage
 
 - **Laptop → projector.** Three windows, switched with `Cmd+Tab`:
@@ -14,7 +26,7 @@ About 25 minutes. Everything you need on stage is in this one file, including wh
 
 **The safety net:** the app is loaded with notes that explain its own stack. When you blank on "what's ONNX again?", you search it on stage. It looks like a demo. It's also your cheat sheet.
 
-**How each code moment works:** you click the link in SCREEN.md, VS Code opens the file at that line, you point at the lines named here, then `Cmd+W` takes you back to the screen. If a link misses: `Cmd+P`, type the filename, Enter, then `Ctrl+G` and the line number. Under every **ON SCREEN** below you'll find the code as the projector shows it, then **WHAT IT DOES** in plain words. That part is for you; you don't have to say it.
+**How each code moment works:** you click the link in SCREEN.md, VS Code opens the file at that line, you point at the lines named here, then `Cmd+W` takes you back to the screen. If a link misses: `Cmd+P`, type the filename, Enter, then `Ctrl+G` and the line number. Under every **ON SCREEN** below you'll find the code as the projector shows it, then **WHAT IT DOES** in plain words: background for you, not for saying out loud.
 
 | # | Screen section | Min |
 | --- | --- | --- |
@@ -104,7 +116,7 @@ return pipeline('feature-extraction', MODEL_ID, {               // line 66
 });
 ```
 
-**WHAT IT DOES**
+**WHAT IT DOES** *(for you, not out loud)*
 - This file is the only place in the app that knows a model exists. The rest of the app talks to an interface called `VectorService`, so swapping the model means touching one file.
 - `MODEL_ID` is the name of a repository on Hugging Face. `onnx-community` is the account that publishes models converted for Transformers.js.
 - `pipeline(...)` is the whole API: name a task and a model, get back a function you can call with text. `'feature-extraction'` is the task name for "give me vectors" (others would be `'text-generation'`, `'translation'`).
@@ -137,7 +149,7 @@ const QUERY_PREFIX = 'task: search result | query: ';
 const DOC_PREFIX = 'title: none | text: ';
 ```
 
-**WHAT IT DOES**
+**WHAT IT DOES** *(for you, not out loud)*
 - Plain text glued in front of the input before the model sees it. Nothing in the code reads it; the model learned these exact words in training.
 - Your question gets `QUERY_PREFIX` ("this is a search query"). Every note gets `DOC_PREFIX` when it's saved, edited or imported ("this is a document, it has no title, here's the text"). Google's format has a title slot; notes have none, and `none` is what Google says to write.
 - Why two: a short question and the long note that answers it don't look alike. The prefix tells the model which role each text plays, so it puts a question near its answer, not near other questions.
@@ -159,7 +171,7 @@ Then the tagging trick, the cleverest thing in the repo.
 
 **SAY** "This model can only output numbers. It can't write a single word. So how does it write my tags? It doesn't. I take every word in the note as a candidate tag, embed the note, embed every candidate, and keep the words that land closest to the note. The model never writes anything, it just tells me which of my own words best stand for the whole note."
 
-**WHAT IT DOES** (the code under the comment, `generateTags`, lines 32-81)
+**WHAT IT DOES** *(for you, not out loud: the code under the comment, `generateTags`, lines 32-81)*
 - Line 33: your own `#hashtags` are pulled out first. They're always kept.
 - Line 35: the candidates. Every word and two-word phrase in the note, skipping ones that start or end with a filler word ("the", "και"), numbers and one-letter words. At most 32. (That's in `KeyphraseCandidates.ts`; no model involved.)
 - Lines 45-46: embed the note once, then every candidate.
@@ -194,7 +206,7 @@ sqlite3.mjs                  699K
 sqlite3.wasm                 5.6M
 ```
 
-**WHAT IT SHOWS**
+**WHAT IT SHOWS** *(for you, not out loud)*
 - `sqlite3.wasm`: SQLite itself, compiled, with sqlite-vec inside. The engine.
 - `sqlite3.mjs`: the JavaScript that downloads the engine, starts it and gives you a friendly API (`db.exec`, `db.transaction`).
 - `sqlite3-opfs-async-proxy.js`: a small helper thread that does SQLite's file reads and writes. It's the reason for stop 4.
@@ -215,7 +227,7 @@ CREATE TABLE IF NOT EXISTS notes(
   ...
 ```
 
-**WHAT IT DOES**
+**WHAT IT DOES** *(for you, not out loud)*
 - Runs every time the app starts. `IF NOT EXISTS` means it only creates what's missing.
 - `vec_notes` is a **virtual table**: its storage is run by an extension (sqlite-vec, whose table type is `vec0`) instead of SQLite itself. `float[768]` means each row holds exactly 768 numbers.
 - There's no note-id column. A vector row's hidden `rowid` is the same number as its note's `rowid` in `notes`. That's the whole link between a note and its vector.
@@ -261,7 +273,7 @@ if (isSecure && hasSharedArrayBuffer && 'opfs' in sqlite3) {                // 2
   storage = 'memory';
 ```
 
-**WHAT IT DOES**
+**WHAT IT DOES** *(for you, not out loud)*
 - Runs once at startup, inside the worker. A few lines up (line 9), `initSQLite` starts the engine; while it starts, SQLite also tries to set up its OPFS driver and launch the 21K helper. That only works on an isolated page.
 - Line 18: `crossOriginIsolated` is the browser's answer to "did this page arrive with the COOP and COEP headers?"
 - Line 19: does SharedArrayBuffer exist here? Only on isolated pages.
@@ -273,9 +285,9 @@ if (isSecure && hasSharedArrayBuffer && 'opfs' in sqlite3) {                // 2
 
 Then the three links under the chain, a few seconds each:
 
-- **`vite.config.ts:12`**: `server.headers` with the two headers. **WHAT IT DOES** The dev server sends them on every response while I develop.
-- **`vercel.json`**: the same two headers (plus a third, `Cross-Origin-Resource-Policy`, that's harmless) for `"/(.*)"`, meaning every URL. **WHAT IT DOES** The production host sends them. The `rewrites` part sends every URL to `index.html` so the app opens at any address.
-- **`index.html:11`**: `<script src="/coi-serviceworker.js">`, the hack. **WHAT IT DOES** It runs before the app. If the page isn't isolated, it installs a service worker that catches every file the page downloads, adds the two headers to the response, and reloads the page once. The browser sees headers the server never sent.
+- **`vite.config.ts:12`**: `server.headers` with the two headers. **WHAT IT DOES** *(for you, not out loud)* The dev server sends them on every response while I develop.
+- **`vercel.json`**: the same two headers (plus a third, `Cross-Origin-Resource-Policy`, that's harmless) for `"/(.*)"`, meaning every URL. **WHAT IT DOES** *(for you, not out loud)* The production host sends them. The `rewrites` part sends every URL to `index.html` so the app opens at any address.
+- **`index.html:11`**: `<script src="/coi-serviceworker.js">`, the hack. **WHAT IT DOES** *(for you, not out loud)* It runs before the app. If the page isn't isolated, it installs a service worker that catches every file the page downloads, adds the two headers to the response, and reloads the page once. The browser sees headers the server never sent.
 
 **10-second proof (optional)** In the browser: `Cmd+Opt+J`, type `crossOriginIsolated`, Enter → `true`. Close DevTools.
 
@@ -322,7 +334,7 @@ and a few lines down:
 if (row.distance < 1.0) {                    // 522
 ```
 
-**WHAT IT DOES** (read the SQL in this order)
+**WHAT IT DOES** *(for you, not out loud: read the SQL in this order)*
 1. `WITH knn AS ( ... )`: a named step. "First find the nearest vectors, and call that list `knn`."
 2. `WHERE embedding MATCH ? AND k = ?`: sqlite-vec's nearest-neighbour search. The first `?` is the question's vector, and `k` is how many neighbours to return. It still measures the distance to every stored vector (ordinary straight-line distance, "L2", just in 768 dimensions), but it does it inside sqlite-vec in fast chunks. It hands back each neighbour's `rowid` and `distance`.
 3. `JOIN notes ON notes.rowid = knn.rowid`: attach the note that owns each vector (same row number).
@@ -354,7 +366,7 @@ What the distances mean (all vectors have length 1):
 {((1 - note.distance) * 100).toFixed(0)}% Match
 ```
 
-**WHAT IT DOES** Distance 0 shows 100%, distance 0.8 shows 20%. Because of the cutoff, every result on screen is between 0% and 100%. It's a scale I invented, not a probability.
+**WHAT IT DOES** *(for you, not out loud)* Distance 0 shows 100%, distance 0.8 shows 20%. Because of the cutoff, every result on screen is between 0% and 100%. It's a scale I invented, not a probability.
 
 **DO** Switch to the app and do the badge confession: point at the percentage on a result you all agreed was correct earlier, probably something like 20 or 30%. That's how made up it is.
 
@@ -378,7 +390,7 @@ What the distances mean (all vectors have length 1):
 workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset } });
 ```
 
-**WHAT IT DOES** Sends the question to the worker, and that's it: the function returns nothing. The answer arrives later in a separate message handler (line 43), whose `SEARCH_RESULTS` branch (lines 65-66) puts the results into React state, and React redraws the list. Questions shorter than 2 characters never get sent (line 127).
+**WHAT IT DOES** *(for you, not out loud)* Sends the question to the worker, and that's it: the function returns nothing. The answer arrives later in a separate message handler (line 43), whose `SEARCH_RESULTS` branch (lines 65-66) puts the results into React state, and React redraws the list. Questions shorter than 2 characters never get sent (line 127).
 
 **SAY** "React never calls search. It sends a message."
 
@@ -392,13 +404,13 @@ workerRef.current?.postMessage({ type: 'SEARCH', payload: { query, limit, offset
   self.postMessage({ type: 'SEARCH_RESULTS', results: ... });   // 160
 ```
 
-**WHAT IT DOES** Every message from the page lands in one handler (line 137), and a long `if / else if` on `type` picks what to do. For `'SEARCH'`: embed the question (or reuse its vector if it's the same question as last time), run the SQL from stop 5, send the results back. It's all inside a `try / catch`, so any error goes back to the page as an `ERROR` message instead of vanishing.
+**WHAT IT DOES** *(for you, not out loud)* Every message from the page lands in one handler (line 137), and a long `if / else if` on `type` picks what to do. For `'SEARCH'`: embed the question (or reuse its vector if it's the same question as last time), run the SQL from stop 5, send the results back. It's all inside a `try / catch`, so any error goes back to the page as an `ERROR` message instead of vanishing.
 
 **SAY** "The worker gets the message, embeds the question, asks SQLite, and sends the answer back as another message."
 
 **ON SCREEN** `WorkerMessages.ts`
 
-**WHAT IT DOES** The list of every allowed message: 17 kinds page → worker (`WorkerMessage`), 19 kinds worker → page (`WorkerResponse`). The `|` means "one of these". TypeScript uses the list to catch typos in message names. Data sent with `postMessage` is copied, not shared: the page and the worker never hold the same object.
+**WHAT IT DOES** *(for you, not out loud)* The list of every allowed message: 17 kinds page → worker (`WorkerMessage`), 19 kinds worker → page (`WorkerResponse`). The `|` means "one of these". TypeScript uses the list to catch typos in message names. Data sent with `postMessage` is copied, not shared: the page and the worker never hold the same object.
 
 **SAY** "17 messages in, 19 out. It's a small API between my UI and my backend, and the backend is in the same tab."
 
@@ -448,11 +460,11 @@ const embedding = textChanged
 await this.noteRepository.update({ ...note, isPinned }, embedding);   // 29
 ```
 
-**WHAT IT DOES** Compare the old text with the new. If it changed, compute a new vector; if not (pinning, re-tagging), skip the model so it stays instant. The vector is computed **before** anything is written: if the model fails, nothing changes, and the old text and old vector still match.
+**WHAT IT DOES** *(for you, not out loud)* Compare the old text with the new. If it changed, compute a new vector; if not (pinning, re-tagging), skip the model so it stays instant. The vector is computed **before** anything is written: if the model fails, nothing changes, and the old text and old vector still match.
 
 **ON SCREEN** `SqliteNoteRepository.ts:235`
 
-**WHAT IT DOES** `update()` wraps everything in `this.db.transaction(...)`, meaning all or nothing: update the note's row, and if there's a new vector, replace the old one (delete it, insert the new one; sqlite-vec's tables can't edit a row in place). The old bug: this function updated the text and never touched the vector.
+**WHAT IT DOES** *(for you, not out loud)* `update()` wraps everything in `this.db.transaction(...)`, meaning all or nothing: update the note's row, and if there's a new vector, replace the old one (delete it, insert the new one; sqlite-vec's tables can't edit a row in place). The old bug: this function updated the text and never touched the vector.
 
 **ON SCREEN** `ReindexNotesUseCase.ts:17`
 
@@ -462,7 +474,7 @@ const stored = await this.noteRepository.getEmbeddingVersion();  // 19
 if (stored === current) return 0;                                // 20
 ```
 
-**WHAT IT DOES** Runs at every startup. `version` is a label like `embeddinggemma-300m-ONNX:q4:v2` (model, precision, revision). The database keeps the label of the model that made its vectors. Same label: nothing to do, which is every normal startup. Different label: re-embed every note once (that's the "Re-indexing notes" message in the header), then save the new label. Why: vectors from different models, or the same model at a different precision, can't be compared. Mixing them makes search quietly wrong.
+**WHAT IT DOES** *(for you, not out loud)* Runs at every startup. `version` is a label like `embeddinggemma-300m-ONNX:q4:v2` (model, precision, revision). The database keeps the label of the model that made its vectors. Same label: nothing to do, which is every normal startup. Different label: re-embed every note once (that's the "Re-indexing notes" message in the header), then save the new label. Why: vectors from different models, or the same model at a different precision, can't be compared. Mixing them makes search quietly wrong.
 
 ### Story 2 · One word cost a gigabyte
 
@@ -480,7 +492,7 @@ Background, in plain words: a model is a big file of numbers called *weights* (3
 const MODEL_DTYPE = 'q4';
 ```
 
-**WHAT IT DOES** Picks which version of the model **file** to download: 32, 8 or 4 bits per weight. It doesn't change what comes out: always 768 normal 32-bit numbers. The last comment line: the 4-bit version also has fast GPU code for its math (`MatMulNBits` is the name of that operation); the 8-bit one mostly falls back to the CPU.
+**WHAT IT DOES** *(for you, not out loud)* Picks which version of the model **file** to download: 32, 8 or 4 bits per weight. It doesn't change what comes out: always 768 normal 32-bit numbers. The last comment line: the 4-bit version also has fast GPU code for its math (`MatMulNBits` is the name of that operation); the 8-bit one mostly falls back to the CPU.
 
 **SAY** (sequel) The 4-bit model worked on the CPU and returned junk on my Mac's GPU. No error, every note at the same distance from every query. That's the second half of the lesson: the small file needs special GPU code, and on some GPUs it's wrong. Now the app gives the model a two-sentence exam at startup and falls back to CPU if it fails. A model that can be silently wrong needs a smoke test, like any other dependency.
 
@@ -495,7 +507,7 @@ const gap = cosine(note, related) - cosine(note, unrelated);
 return gap > SANITY_MIN_GAP;   // 0.08
 ```
 
-**WHAT IT DOES** Embed three texts: a pasta note, a related question (dinner) and an unrelated one (kubernetes). `gap` = how much closer dinner is to pasta than kubernetes is. A healthy model gives about 0.25. The broken GPU gave about 0: every text looked equally close to every other. Pass if the gap is above 0.08; it also fails if any number comes out broken. Just above (lines 50-60): try the GPU first, give it the exam, and if it fails, free it and load on the CPU instead. The console says which one won: `Vector model: q4 on wasm` or `on webgpu`.
+**WHAT IT DOES** *(for you, not out loud)* Embed three texts: a pasta note, a related question (dinner) and an unrelated one (kubernetes). `gap` = how much closer dinner is to pasta than kubernetes is. A healthy model gives about 0.25. The broken GPU gave about 0: every text looked equally close to every other. Pass if the gap is above 0.08; it also fails if any number comes out broken. Just above (lines 50-60): try the GPU first, give it the exam, and if it fails, free it and load on the CPU instead. The console says which one won: `Vector model: q4 on wasm` or `on webgpu`.
 
 **THE ENDING** **SAY** "And it's not just my Mac. There's an open GitHub issue about it, number 1728 on Transformers.js: someone with an NVIDIA card on Windows, same model, same silent junk. The new major version of the library, version 4, rewrote the GPU engine, and I tested it on this Mac: the GPU now gives exactly the same numbers as the CPU, to three decimals, and it's twice as fast. I haven't upgraded the app yet, because version 4 brought its own surprise on the CPU side. Which is the lesson one more time: test it."
 
@@ -513,15 +525,15 @@ return gap > SANITY_MIN_GAP;   // 0.08
     <strong>Your notes are not being saved.</strong> ...
 ```
 
-**WHAT IT DOES** If the database ended up in memory (stop 4's fallback), show the amber box. The value travels: `DatabaseFactories.ts` decides → the worker sends it in its `READY` message → React stores it → this line shows the box.
+**WHAT IT DOES** *(for you, not out loud)* If the database ended up in memory (stop 4's fallback), show the amber box. The value travels: `DatabaseFactories.ts` decides → the worker sends it in its `READY` message → React stores it → this line shows the box.
 
 **ON SCREEN** `sw.ts:26`, the service worker
 
-**WHAT IT DOES** The browser runs this for every file the page asks for. It ignores anything that isn't the app's own files or the ONNX runtime from jsdelivr (model files are cached by Transformers.js itself). Network first: download the file, save a copy, use it, so a new deploy shows up right away. No network: use the saved copy, and for any page address fall back to the saved home page.
+**WHAT IT DOES** *(for you, not out loud)* The browser runs this for every file the page asks for. It ignores anything that isn't the app's own files or the ONNX runtime from jsdelivr (model files are cached by Transformers.js itself). Network first: download the file, save a copy, use it, so a new deploy shows up right away. No network: use the saved copy, and for any page address fall back to the saved home page.
 
 **ON SCREEN** `warmAppCache.ts:21`
 
-**WHAT IT DOES** Fixes the first visit. On your very first visit the service worker doesn't exist yet while the page loads, so nothing passes through it and nothing gets saved; the next launch without network would fail. This asks the browser for its list of every file already loaded (`performance.getEntriesByType('resource')`), and saves each app file into the service worker's cache. It runs in the page and in the worker, because each keeps its own list, and the worker is the one that loaded `sqlite3.wasm` and the ONNX runtime.
+**WHAT IT DOES** *(for you, not out loud)* Fixes the first visit. On your very first visit the service worker doesn't exist yet while the page loads, so nothing passes through it and nothing gets saved; the next launch without network would fail. This asks the browser for its list of every file already loaded (`performance.getEntriesByType('resource')`), and saves each app file into the service worker's cache. It runs in the page and in the worker, because each keeps its own list, and the worker is the one that loaded `sqlite3.wasm` and the ONNX runtime.
 
 ## 6 · Wrap-up (1 min)
 
