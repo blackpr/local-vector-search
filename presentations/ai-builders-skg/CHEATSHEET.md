@@ -22,7 +22,7 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 ## ONNX and ONNX Runtime Web
 
 - **30 seconds:** ONNX is a neutral file format for neural networks, "the PDF of models". Train in PyTorch, export to ONNX, run anywhere. ONNX Runtime Web is Microsoft's engine that executes those files in a browser.
-- **Two backends:** WASM (CPU, works everywhere) and WebGPU (GPU, much faster, Chrome/Edge first). `device: 'auto'` picks.
+- **Two backends:** WASM (CPU, works everywhere) and WebGPU (GPU, much faster, Chrome/Edge first). The app asks the browser for a GPU, tries it first and gives it an exam (below); WASM is the fallback.
 - **Why not WebLLM / llama.cpp WASM?** Those target chat LLMs. We need an embedding model, which is a Transformers.js sweet spot.
 
 ## WebGPU vs WebAssembly
@@ -31,6 +31,10 @@ The project does **not** use TensorFlow.js. It uses **Transformers.js** (`@huggi
 - **WebGPU:** the modern browser API for the GPU, successor to WebGL, designed for compute as well as graphics. This is what makes model inference in a browser fast.
 - **Q: "Does it work on Safari/Firefox?"** WASM path works everywhere. WebGPU support is uneven. Say which browser you tested in.
 - **The startup exam (good story):** q4 weights on WASM are correct; on a real Mac GPU they returned junk, silently: every note the same distance from every query, UI looked fine. Headless tests have no GPU, so it was never caught. Now `TransformersVectorService.initialize()` asks the browser for a GPU adapter, loads there if one exists, embeds "pasta with garlic…" vs "something quick for dinner" vs "kubernetes pod keeps restarting", and requires the related pair to be clearly closer (gap > 0.08; WASM gives ~0.25). Fails → dispose, reload on WASM. Console prints `Vector model sanity check: gap = …` and `Vector model: q4 on webgpu|wasm`.
+- **It's a known upstream bug:** transformers.js issue #1728 (open since July 2026, no maintainer reply yet): EmbeddingGemma q4 and q8 on WebGPU give silently wrong embeddings, fp32 is fine. Reported on 3.8.1 with an NVIDIA RTX 5060 Ti on Windows, so it's not an Apple thing.
+- **Measured on Tim's Mac (Apple GPU, Metal 3, 2026-10-09), same exam as the app:** 3.8.0 GPU gap 0.018 (fail). 3.8.0 CPU 0.266 (pass). **4.3.1 GPU 0.266 (pass), identical cosines to the CPU to three decimals.** Speed, warm: 3.8.0 CPU 90 ms per note and 1.0 s for 30 tag words; 4.3.1 GPU 47 ms and 0.7 s.
+- **Why not upgrade yet:** v4 loads a different CPU engine build by default (`ort-wasm-simd-threaded.asyncify.wasm`), which can't run the 4-bit word lookup (`Could not find an implementation for GatherBlockQuantized`). Fails on 4.0.0, 4.3.0 and 4.3.1. Same error reported for Gemma 3 in the comments of transformers.js #1581; the maintainer's answer was "use WebGPU". Workaround that tested fine: point `env.backends.onnx.wasm.wasmPaths` at the plain build (`ort-wasm-simd-threaded.wasm`) when running on the CPU: same numbers, 93 ms per note.
+- **Headers = speed too:** ONNX Runtime only runs several CPU threads on cross-origin isolated pages. Measured: 90 ms per note with COOP/COEP, 296 ms without.
 - **Trap inside the trap:** Transformers.js keeps the first session promise it ever made in a worker (`wasmInitPromise`). If the first load throws, every later load in that worker throws the same error. That's why the code checks for a GPU adapter *before* trying WebGPU instead of try/catch.
 
 ## EmbeddingGemma (onnx-community/embeddinggemma-300m-ONNX)

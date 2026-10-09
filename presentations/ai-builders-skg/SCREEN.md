@@ -208,6 +208,8 @@ dtype: 'q4'     →    197 MB model      same results on my test set
 
 So the model now [takes a two-sentence exam at startup](../../src/infrastructure/TransformersVectorService.ts#L78) and gets demoted to CPU if it fails.
 
+Not just my Mac: [transformers.js #1728](https://github.com/huggingface/transformers.js/issues/1728). Fixed in v4: tested here, GPU = CPU to three decimals.
+
 &nbsp;
 
 ## "Offline" is three promises

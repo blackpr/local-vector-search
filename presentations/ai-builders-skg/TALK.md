@@ -170,7 +170,7 @@ Then the tagging trick, the cleverest thing in the repo.
 
 **Optional laugh** `KeyphraseCandidates.ts:15`, the Greek half of the filler-word list. It isn't linked on screen: `Cmd+P` KeyphraseCandidates, `Ctrl+G` 15. "The only Greek-specific code in the whole app: a list of boring Greek words to skip."
 
-**LIVE PROOF (optional)** Add tab, paste a Greek sentence, press Save. The button says "Tagging & saving…" for about two seconds (it's embedding ~30 candidate words on the CPU), then the note shows up in the list with Greek tags. Have the sentence in your clipboard and try it at home first.
+**LIVE PROOF (optional)** Add tab, paste a Greek sentence, press Save. The button says "Tagging & saving…" for a second or so (it's embedding ~30 candidate words on the CPU), then the note shows up in the list with Greek tags. Have the sentence in your clipboard and try it at home first.
 
 **IF ASKED** It's called KeyBERT. The app used to load a second, text-generating model for this (LaMini-Flan-T5). It repeated itself, returned whole sentences as one tag, and returned nothing for Greek. The limit: a tag is always a word that's in the note, so it can't invent "devops" for a Kubernetes note. Tagging uses a third prefix, `task: clustering`, meaning "put similar texts close together".
 
@@ -284,7 +284,8 @@ Then the three links under the chain, a few seconds each:
 **IF ASKED**
 
 - "Is the hack running right now?" No. Vercel sends the real headers, so the hack sees the page is already isolated and exits (`coi-serviceworker.js` line 88). It only does anything on hosts like GitHub Pages.
-- "Could you skip the whole chain?" Probably. SQLite has a second OPFS driver, `opfs-sahpool`, that needs no SharedArrayBuffer and no headers, and it's already in this build. The catch: only one tab can have the database open at a time.
+- "Could you skip the whole chain?" Probably. SQLite has a second OPFS driver, `opfs-sahpool`, that needs no SharedArrayBuffer and no headers, and it's already in this build. The catch: only one tab can have the database open at a time. And I'd lose the speed bonus in the next answer.
+- "Do the headers buy you anything else?" Yes, speed. The model's CPU engine only uses several CPU cores on isolated pages. Measured on this Mac: 90 ms to embed a note with the headers, 296 ms without. Three times faster, from two HTTP headers.
 - "Can the browser delete my data?" Under storage pressure, yes, unless the site has persistent storage. The app asks for it at startup; the browser can still say no. That's what Export is for.
 - "What does COEP actually block?" With it, the page can only load files from other sites if those files say they allow it. Hugging Face and jsdelivr do, which is why the model downloads still work.
 
@@ -488,6 +489,10 @@ return gap > SANITY_MIN_GAP;   // 0.08
 
 **WHAT IT DOES** Embed three texts: a pasta note, a related question (dinner) and an unrelated one (kubernetes). `gap` = how much closer dinner is to pasta than kubernetes is. A healthy model gives about 0.25. The broken GPU gave about 0: every text looked equally close to every other. Pass if the gap is above 0.08; it also fails if any number comes out broken. Just above (lines 50-60): try the GPU first, give it the exam, and if it fails, free it and load on the CPU instead. The console says which one won: `Vector model: q4 on wasm` or `on webgpu`.
 
+**THE ENDING** **SAY** "And it's not just my Mac. There's an open GitHub issue about it, number 1728 on Transformers.js: someone with an NVIDIA card on Windows, same model, same silent junk. The new major version of the library, version 4, rewrote the GPU engine, and I tested it on this Mac: the GPU now gives exactly the same numbers as the CPU, to three decimals, and it's twice as fast. I haven't upgraded the app yet, because version 4 brought its own surprise on the CPU side. Which is the lesson one more time: test it."
+
+**IF ASKED** "What surprise?" Version 4 downloads a different build of the CPU engine by default, and that build is missing one operation this model needs (`GatherBlockQuantized`, the 4-bit word lookup). The model refuses to load on the CPU. Pointing it at the plain CPU build fixes it. Someone hit the same error with Gemma 3 in issue 1581; the maintainer's answer was "use WebGPU". Fine, unless your user has no GPU.
+
 ### Story 3 · "Offline" is three promises
 
 **SAY** Warm tab, surviving a restart, cold launch. I had the first, mostly the second (it silently fell back to RAM when OPFS was missing, now it warns), and not the third: I cached a gigabyte of model and forgot 300 KB of JavaScript. Now it cold-starts with the server dead and the network cut.
@@ -532,7 +537,7 @@ No code. Read the three lines. Then the two "next" lines:
 6. Nothing runs while you type any more. Add: Save does tags + embedding + write. Edit: Save re-embeds if the text changed; "Suggest tags" is a button you press if you want new tags.
 7. Fonts: browser 150%, VS Code preview zoomed, terminal font big. Open the terminal in the repo and run `ls -lh src/vendor` once, so on stage it's one `↑` away.
 8. Click every code link in SCREEN.md once. Each should open on the line this file names under **ON SCREEN**.
-9. Expect the console to say `Vector model: q4 on wasm` on your Mac. Searches take a second or two; that's the CPU path and it's fine. Don't be surprised on stage.
+9. Expect the console to say `Vector model: q4 on wasm` on your Mac: the GPU fails the exam (the known bug, story 2). Measured in a test page on this Mac: about 0.1 s to turn a question into numbers on the CPU, about 1 s for the 30 tag words on Save. If search feels much slower than that in the app, check the console.
 10. iPad: open this file in whatever app you'll use on stage, check it works with the iPad offline, turn auto-lock off, and scroll it end to end once.
 
 ---
