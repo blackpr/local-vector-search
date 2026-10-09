@@ -11,6 +11,7 @@ About 25 minutes. Everything you need on stage is in this one file, including wh
 | **WHAT · WHY HERE · COST** (tour stops) | Yes, briefly and in your own words. They're the three beats printed on screen. |
 | **THE IDEA IN ONE LINE**, **THE ENDING** | Yes. |
 | **DO** | No. Something you do: switch window, type, click. |
+| **DO + SAY** | Yes: point at the thing in *(italics)*, then say the quoted line. |
 | **ON SCREEN** | No. What the projector shows, so you can match the iPad to the screen. |
 | **WHAT IT DOES** | No. Background for you, so you know what you're pointing at and can answer questions. |
 | **IF ASKED** | Only if someone asks. |
@@ -72,15 +73,19 @@ If the room is shy, these all passed testing:
 
 ## 2 · What just happened (2 min)
 
-**No code in this section.** Don't click the two links under the diagram; the worker code comes at stop 6. Point along the diagram with the mouse and follow one search:
+**No code in this section.** Don't click the two links under the diagram; the worker code comes at stop 6.
 
-1. You type a question. The **React UI** lives on the **main thread**, the one that draws the page and handles clicks.
-2. React doesn't search. It sends a `postMessage` to the **web worker**, a second thread in the same tab.
-3. In the worker, **Transformers.js** runs the model on the question and gets 768 numbers back.
-4. **SQLite** with **sqlite-vec** compares those numbers with the numbers stored for every note, in `notes.db`, which lives in **OPFS**.
-5. The closest notes go back to React as another message, and React draws them.
+**DO + SAY** Follow one search through the diagram. Point at each box with the mouse, then say its line. About 45 seconds in total.
 
-**SAY** One search: React posts a message, the worker embeds the query into 768 numbers, SQLite sorts notes by distance, results come back. The UI thread never touches the model.
+1. *(React UI box)* "You type a question. That's React, on the main thread: the one that draws the page and handles your clicks."
+2. *(the postMessage arrow)* "React doesn't search. It sends a message to a web worker, a second thread in the same tab."
+3. *(Transformers.js box)* "In the worker, the model turns your question into 768 numbers."
+4. *(SQLite box, then `notes.db` in OPFS)* "SQLite compares those numbers with the numbers stored for every note, in one database file on the browser's private disk."
+5. *(the arrow back)* "The closest notes come back to React as another message, and React draws them."
+
+**SAY** (punchline) "So the screen never waits for the model. The thread that draws the page never touches it."
+
+Don't explain Transformers.js, SQLite or OPFS here: each gets its own stop in the tour. Here they're just boxes on the path.
 
 **SAY** Two things are called "worker" and have nothing in common. The web worker computes. The service worker is a network proxy that keeps the app available offline. (Point at the service worker box: it's not part of a search at all.)
 
