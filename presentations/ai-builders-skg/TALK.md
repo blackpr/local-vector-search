@@ -1,20 +1,7 @@
 # Speaker notes · SELECT * FROM my_brain
 
-**Private. This is the iPad file. The projector shows SCREEN.md.**
+**Private. The projector shows SCREEN.md.**
 About 25 minutes. Everything you need on stage is in this one file, including what every piece of code you open actually does. There are no links on purpose: a tap on the iPad would take you away from your notes.
-
-**How to read this file**
-
-| Label | Out loud? |
-| --- | --- |
-| **SAY** | Yes. Word for word, or close to it. |
-| **WHAT · WHY HERE · COST** (tour stops) | Yes, briefly and in your own words. They're the three beats printed on screen. |
-| **THE IDEA IN ONE LINE**, **THE ENDING** | Yes. |
-| **DO** | No. Something you do: switch window, type, click. |
-| **DO + SAY** | Yes: point at the thing in *(italics)*, then say the quoted line. |
-| **ON SCREEN** | No. What the projector shows, so you can match the iPad to the screen. |
-| **WHAT IT DOES** | No. Background for you, so you know what you're pointing at and can answer questions. |
-| **IF ASKED** | Only if someone asks. |
 
 ## Setup on stage
 
@@ -160,7 +147,7 @@ const DOC_PREFIX = 'title: none | text: ';
 - Why two: a short question and the long note that answers it don't look alike. The prefix tells the model which role each text plays, so it puts a question near its answer, not near other questions.
 - Forget them and you still get 768 numbers. They're just a bit worse, and nothing tells you.
 
-**SAY** "The model was trained with these exact words in front of every text. Questions get one, notes get the other. Same model, two hats. Forget them and nothing crashes. Results just get a bit worse, quietly, forever. That's the AI bug I fear most: there's no error."
+**SAY** "The model was trained with these exact words in front of every text. Questions get one, notes get the other. Forget them and nothing crashes. The results just get a bit worse, and nothing tells you."
 
 Then the tagging trick, the cleverest thing in the repo.
 
@@ -185,11 +172,11 @@ Then the tagging trick, the cleverest thing in the repo.
 - Lines 59-74: pick up to 5, one at a time. Each pick balances "close to the note" against "different from tags already picked", so you don't get "sqlite", "sqlite wasm" and "real sqlite". That balance is called MMR.
 - Lines 77-79: if anything fails, keep just your hashtags. Tagging can never stop a note from saving.
 
-**Optional laugh** `KeyphraseCandidates.ts:15`, the Greek half of the filler-word list. It isn't linked on screen: `Cmd+P` KeyphraseCandidates, `Ctrl+G` 15. "The only Greek-specific code in the whole app: a list of boring Greek words to skip."
-
 **LIVE PROOF (optional)** Add tab, paste a Greek sentence, press Save. The button says "Tagging & saving…" for a second or so (it's embedding ~30 candidate words on the CPU), then the note shows up in the list with Greek tags. Have the sentence in your clipboard and try it at home first.
 
 **IF ASKED** It's called KeyBERT. The app used to load a second, text-generating model for this (LaMini-Flan-T5). It repeated itself, returned whole sentences as one tag, and returned nothing for Greek. The limit: a tag is always a word that's in the note, so it can't invent "devops" for a Kubernetes note. Tagging uses a third prefix, `task: clustering`, meaning "put similar texts close together".
+
+**IF ASKED** "Is a whole note one vector?" Yes. The model makes one vector per word piece and the app averages them into one, so every note is one row of 768 numbers. Two catches: the model reads at most 2,048 tokens, about 1,250 to 1,500 English words or 3 pages (half that in Greek), and silently ignores the rest, and a note about two topics lands in between them. For long documents you'd split them into paragraphs and embed each one. That's called chunking, and it's what RAG systems do. My notes are short, so I don't.
 
 ### Stop 3 · SQLite, compiled to WebAssembly (1 min)
 
@@ -217,7 +204,7 @@ sqlite3.wasm                 5.6M
 - `sqlite3-opfs-async-proxy.js`: a small helper thread that does SQLite's file reads and writes. It's the reason for stop 4.
 - Ignore `total` and the `@` if they show: disk blocks and macOS file metadata.
 
-**SAY** "That's the entire database. `sqlite3.wasm` is SQLite itself, compiled: 5.6 MB, smaller than most hero images. `sqlite3.mjs` is the JavaScript that loads it and gives me a nice API. And that tiny 21K file, remember it. It's the villain of the next stop."
+**SAY** "That's the entire database. `sqlite3.wasm` is SQLite itself, compiled: 5.6 MB, smaller than most hero images. `sqlite3.mjs` is the JavaScript that loads it and gives me a nice API. The 21K file is a small helper SQLite needs to save to the browser's disk. That's the next stop."
 
 **ON SCREEN** `SqliteNoteRepository.ts:16`
 
@@ -239,10 +226,11 @@ CREATE TABLE IF NOT EXISTS notes(
 - `notes` holds the text, tags (a JSON list in a text column), pinned flag, timestamps, a `uuid` for syncing between devices, and `deleted_at`: deleting a note sets a date instead of removing the row, which is how undo works.
 - There's also a small `meta` table that remembers which model made the vectors (round 5, story 1).
 
-**SAY** "Vectors in one table, notes in another. Same database, same file. Backup is: download the file." (That's Export in the Sync menu.)
+**SAY** "Vectors in one table, notes in another. Same database, same file. Backup is: download the file." (That's Sync → Export (Save) → "Download Raw DB (.sqlite)". Plain "Export" is the JSON backup, a different thing.)
 
 **IF ASKED**
 - "5.6 MB? I read 5.9." Same file. `ls -h` counts in 1024s; 5,907,734 bytes is 5.9 MB in decimal and 5.6 in binary. On stage, say "under six megabytes".
+- "You said notes.db, but my download is .sqlite?" Same file, same bytes. Inside the browser it's called `notes.db`; the download button names its copy `notes_db_<date>.sqlite`. `.db` and `.sqlite` are just two conventions for SQLite files. It opens in any SQLite tool: the `notes` table reads straight away, and the vector table needs the sqlite-vec extension loaded.
 - "Why copy it into the repo instead of using npm?" The npm package is plain SQLite. Extensions can't be loaded into the WASM build at runtime, they have to be compiled in. This one comes from sqlite-vec's own build pipeline: SQLite 3.45.3 + sqlite-vec 0.1.7-alpha.2, January 2025.
 - "Why not PGlite?" (Postgres in WASM, with pgvector.) Valid. SQLite is smaller and the database is one file you can export.
 
@@ -362,8 +350,8 @@ What the distances mean (all vectors have length 1):
 **SAY**
 - (495, read aloud) "Give me the nearest vectors to my question. That's vector search. It's a WHERE clause."
 - (509-511) "And from there it's plain SQL: join my normal notes table, skip the trash, closest first."
-- (522) "This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0. Nobody told me to."
-- (optional, 15 seconds) "Confession: until this week, this query called the distance function on every single row myself. This is sqlite-vec's own nearest-neighbour search. Same results, 26 times faster at 50,000 notes. Read the docs of the extension you're using."
+- (522) "This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0 myself."
+- (optional, 15 seconds) "Until this week, my query computed the distance to every row by hand. This is sqlite-vec's own nearest-neighbour search. Same results, 26 times faster at 50,000 notes."
 
 **ON SCREEN** `NoteList.tsx:83`
 
@@ -514,9 +502,9 @@ return gap > SANITY_MIN_GAP;   // 0.08
 
 **WHAT IT DOES** *(for you, not out loud)* Embed three texts: a pasta note, a related question (dinner) and an unrelated one (kubernetes). `gap` = how much closer dinner is to pasta than kubernetes is. A healthy model gives about 0.25. The broken GPU gave about 0: every text looked equally close to every other. Pass if the gap is above 0.08; it also fails if any number comes out broken. Just above (lines 50-60): try the GPU first, give it the exam, and if it fails, free it and load on the CPU instead. The console says which one won: `Vector model: q4 on wasm` or `on webgpu`.
 
-**THE ENDING** **SAY** "And it's not just my Mac. There's an open GitHub issue about it, number 1728 on Transformers.js: someone with an NVIDIA card on Windows, same model, same silent junk. The new major version of the library, version 4, rewrote the GPU engine, and I tested it on this Mac: the GPU now gives exactly the same numbers as the CPU, to three decimals, and it's twice as fast. I haven't upgraded the app yet, because version 4 brought its own surprise on the CPU side. Which is the lesson one more time: test it."
+**THE ENDING** **SAY** "And it's not just my Mac. There's an open GitHub issue about it, number 1728 on Transformers.js: someone with an NVIDIA card on Windows, same model, same silent junk. The new major version of the library, version 4, rewrote the GPU engine, and I tested it on this Mac: the GPU now gives exactly the same numbers as the CPU, to three decimals, and it's twice as fast. I haven't upgraded the app yet, because version 4 has a problem on the CPU side."
 
-**IF ASKED** "What surprise?" Version 4 downloads a different build of the CPU engine by default, and that build is missing one operation this model needs (`GatherBlockQuantized`, the 4-bit word lookup). The model refuses to load on the CPU. Pointing it at the plain CPU build fixes it. Someone hit the same error with Gemma 3 in issue 1581; the maintainer's answer was "use WebGPU". Fine, unless your user has no GPU.
+**IF ASKED** "What problem?" Version 4 downloads a different build of the CPU engine by default, and that build is missing one operation this model needs (`GatherBlockQuantized`, the 4-bit word lookup). The model refuses to load on the CPU. Pointing it at the plain CPU build fixes it. Someone hit the same error with Gemma 3 in issue 1581; the maintainer's answer was "use WebGPU".
 
 ### Story 3 · "Offline" is three promises
 
