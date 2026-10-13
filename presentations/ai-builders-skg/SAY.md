@@ -1,6 +1,6 @@
 # What to say · SELECT * FROM my_brain
 
-Only the lines to say out loud, in order. Everything else (code, what it does, IF ASKED) is in TALK.md. *Italics* are the cue for when to say a line.
+Everything you say to the room, in order, word for word from TALK.md. No code, no "what it does". *Italics* are the cue for when to say a line.
 
 ---
 
@@ -50,11 +50,11 @@ So the screen never waits for the model. The thread that draws the page never to
 
 ## 3 · The tour (8 min)
 
-*Every stop: what is it, why is it here, what did it cost me.*
+*Every stop: what is it, why is it here, what did it cost me. Start with the what: half the room has never heard of these projects.*
 
 ### Stop 1 · Transformers.js (1 min)
 
-**What:** A JavaScript library from Hugging Face that runs AI models in the browser. It's the JS twin of their Python `transformers` library: same `pipeline()` function, same model names. Underneath, it hands the model to ONNX Runtime Web, Microsoft's engine that runs models on the GPU or the CPU.
+**What:** A JavaScript library from Hugging Face that runs AI models in the browser (or Node). It's the JS twin of their Python `transformers` library: same `pipeline()` function, same model names. Underneath, it hands the model to ONNX Runtime Web, Microsoft's engine that runs models on the GPU (WebGPU) or the CPU (WebAssembly).
 
 **Why:** Hugging Face hosts thousands of models already converted for it. I picked one by name and converted nothing.
 
@@ -70,17 +70,21 @@ So the screen never waits for the model. The thread that draws the page never to
 
 **What:** An embedding model from Google, released September 2025, made to run on phones and laptops. 300M parameters, about 200 MB on disk the way I use it. It doesn't chat and it can't write. It does one thing: text in, 768 numbers out, and texts that mean similar things get similar numbers. That list of numbers is the vector the rest of this talk is about. Trained on 100+ languages, which is why the Greek note worked.
 
-**Why:** Small enough for a tab, and multilingual. My notes are half Greek; the classic small model, all-MiniLM, is English-only.
+**Why:** Small enough for a tab, and multilingual. My notes are half Greek; the classic small model (all-MiniLM) is English-only.
 
 **Cost:** It has rules, and breaking them doesn't crash anything.
 
 *The two prefixes:* The model was trained with these exact words in front of every text. Questions get one, notes get the other. Forget them and nothing crashes. The results just get a bit worse, and nothing tells you.
 
-*The tagging comment:* This model can only output numbers. It can't write a single word. So how does it write my tags? It doesn't. I take every word in the note as a candidate tag, embed the note, embed every candidate, and keep the words that land closest to the note. The model never writes anything, it just tells me which of my own words best stand for the whole note.
+*Then the tagging trick, the cleverest thing in the repo. The tagging comment:* This model can only output numbers. It can't write a single word. So how does it write my tags? It doesn't. I take every word in the note as a candidate tag, embed the note, embed every candidate, and keep the words that land closest to the note. The model never writes anything, it just tells me which of my own words best stand for the whole note.
 
-### Stop 3 · SQLite in WebAssembly (1 min)
+### Stop 3 · SQLite, compiled to WebAssembly (1 min)
 
-**What:** SQLite is the most used database in the world, and it isn't a server. It's a small library that keeps a whole database in one file. WebAssembly lets a browser run code written in C at close to native speed. SQLite WASM is the SQLite team's own official build for the browser. Not a port, not a rewrite: the same code your phone runs.
+**What:** Three words to unpack:
+
+- **SQLite** is the most used database in the world, and it isn't a server. It's a small library that keeps a whole database in one file. It's in your phone, your browser, every Python install.
+- **WebAssembly (WASM)** lets a browser run code written in C, C++ or Rust at close to native speed.
+- **SQLite WASM** is the SQLite team's own official build of their C code for the browser. Not a port, not a rewrite: the same code your phone runs. Real SQL, joins, indexes, transactions, in a tab.
 
 **Why:** Notes and their vectors in one real database, with SQL. The browser's built-in store, IndexedDB, is key-value: no SQL, no joins, nothing for vectors.
 
@@ -92,7 +96,11 @@ So the screen never waits for the model. The thread that draws the page never to
 
 ### Stop 4 · OPFS and the header saga (1½ min)
 
-**What:** OPFS is a private hard drive each website gets inside the browser. You can't see it in Finder and other sites can't read it. SharedArrayBuffer is memory that two threads can read and write at the same time. COOP and COEP are two HTTP headers where the server promises the browser "this page doesn't mix with other sites' content". Since the Spectre CPU bug in 2018, browsers only give SharedArrayBuffer to pages that make that promise.
+**What:** Three terms, then the chain makes sense:
+
+- **OPFS** (Origin Private File System): a private hard drive each website gets inside the browser. You can't see it in Finder and other sites can't read it. Works in all major browsers. `notes.db` lives there.
+- **SharedArrayBuffer**: memory that two threads can read and write at the same time.
+- **COOP and COEP**: two HTTP headers where the server promises the browser "this page doesn't mix with other sites' content". Since the Spectre CPU bug in 2018, browsers only give SharedArrayBuffer to pages that make that promise.
 
 **Why:** Without OPFS the database lives in RAM, and a refresh deletes your notes.
 
@@ -114,19 +122,26 @@ I want my notes to survive a refresh
 
 *The fallback code:* If any link in the chain breaks, I land here and your notes live in RAM. The app now shows an amber banner when that happens. It used to say nothing.
 
+*The three links, a few seconds each:*
+- *vite.config.ts:* The dev server sends the two headers on every response while I develop.
+- *vercel.json:* The production host sends the same two headers, on every URL.
+- *the hack:* If the page isn't isolated, a service worker catches every file the page downloads, adds the two headers, and reloads the page once. The browser sees headers the server never sent.
+
+*Optional proof: `Cmd+Opt+J`, type `crossOriginIsolated`, Enter → `true`.*
+
 *End of stop:* Seven levels deep to save a note. Everyone here has a chain like this. Tell me yours at the bar.
 
 ### Stop 5 · sqlite-vec (1½ min)
 
-**What:** An extension for SQLite by Alex Garcia, an independent developer, backed by Mozilla's Builders program. It teaches SQLite about vectors: a column type that holds a list of numbers and functions that measure the distance between two of them. A small piece of C with no dependencies, so it runs anywhere SQLite runs, including WASM.
+**What:** An extension for SQLite by Alex Garcia, an independent developer, backed by Mozilla's Builders program. It teaches SQLite about vectors: a column type that holds a list of numbers (`float[768]`) and functions that measure the distance between two of them. It's a small piece of C with no dependencies, so it runs anywhere SQLite runs, including WASM. It replaced his earlier sqlite-vss, which was built on Facebook's Faiss library and was hard to build for the browser.
 
-Every note is a point in a 768-dimensional space. A question is a point too. Search means finding the notes closest to the question.
+**The idea in one line:** Every note is a point in a 768-dimensional space. A question is a point too. Search means finding the notes closest to the question.
 
 **Why:** Vector search without a vector database. Pinecone, Qdrant and Chroma are servers; this is a SQL function. Search becomes a normal query, joined to my normal tables.
 
-**Cost:** It's pre-1.0, and there's no index: every search measures the distance to every note. For one person's notes that's instant.
+**Cost:** It's pre-1.0 (my build is an alpha), and there's no index: every search measures the distance to every note. For one person's notes that's instant.
 
-*Line 495:* Give me the nearest vectors to my question. That's vector search. It's a WHERE clause.
+*Line 495, read aloud:* Give me the nearest vectors to my question. That's vector search. It's a WHERE clause.
 
 *Lines 509-511:* And from there it's plain SQL: join my normal notes table, skip the trash, closest first.
 
@@ -141,7 +156,9 @@ Every note is a point in a 768-dimensional space. A question is a point too. Sea
 
 *Optional, 15 seconds:* Until this week, my query computed the distance to every row by hand. This is sqlite-vec's own nearest-neighbour search. Same results, 26 times faster at 50,000 notes.
 
-*Switch to the app, point at the % on a result everyone agreed was right.* That's how made up it is.
+*The badge, `(1 - distance) * 100`:* Distance 0 shows 100%, distance 0.8 shows 20%. It's a scale I invented, not a probability.
+
+*Switch to the app, point at the % on a result everyone agreed was right:* That's how made up it is.
 
 ### Stop 6 · The web worker (¾ min)
 
@@ -156,6 +173,8 @@ Every note is a point in a 768-dimensional space. A question is a point too. Sea
 *app.worker.ts:* The worker gets the message, embeds the question, asks SQLite, and sends the answer back as another message.
 
 *WorkerMessages.ts:* 17 messages in, 19 out. It's a small API between my UI and my backend, and the backend is in the same tab.
+
+*Back to SCREEN.md, scroll to section 4.*
 
 ## 4 · Stump the model (4 min)
 
@@ -186,7 +205,9 @@ Editing a note updated the text and kept the old vector. Edit a pasta recipe int
 
 ### Story 2 · One word cost a gigabyte
 
-The code said `dtype: 'fp32'`, with a comment next to it: "SQLite expects float32". Sounds reasonable. SQLite does want float32 vectors. But `dtype` isn't about the vectors that come out, it's about the precision of the model file you download, and the output is float32 no matter what. Switching that one word to `q4`: the model went from 1235 MB to 197 MB, and every question in my test set still returns the same note. With the tagging model gone too, the whole first visit went from about 1.6 GB to 222 MB. Measure before you assume quality needs the big file.
+*If the room needs the background first:* A model is a big file of numbers called weights, 300 million of them here. `dtype` is how many bits each number gets. `fp32` is 32 bits each: 1.2 GB. `q4` is each number rounded to 4 bits: 197 MB. That rounding is called quantization. Think JPEG quality: smaller file, slightly less exact, usually you can't tell.
+
+The code said `dtype: 'fp32'`, with a comment next to it: "SQLite expects float32". Sounds reasonable. SQLite does want float32 vectors. But `dtype` isn't about the vectors that come out, it's about the precision of the model file you download, and the output is float32 no matter what. Switching that one word to `q4`: the model went from 1235 MB to 197 MB, and every question in my test set still returns the same note. (With the tagging model gone too, the whole first visit went from about 1.6 GB to 222 MB.) Measure before you assume quality needs the big file.
 
 *Sequel:* The 4-bit model worked on the CPU and returned junk on my Mac's GPU. No error, every note at the same distance from every query. That's the second half of the lesson: the small file needs special GPU code, and on some GPUs it's wrong. Now the app gives the model a two-sentence exam at startup and falls back to CPU if it fails. A model that can be silently wrong needs a smoke test, like any other dependency.
 
