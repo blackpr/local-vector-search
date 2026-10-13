@@ -16,7 +16,15 @@ Two things. This laptop is now offline and stays that way. And this project is b
 
 I built this and I still can't remember what half the stack does. So I wrote it down, in the app. You ask, my notes answer. Badly phrased questions are better.
 
-*If the room is shy:* `why not just use indexeddb` · `what are those weird cross origin headers` · `why is it called latent` · `where do we eat after the beers` · `the weather in london tomorrow`
+*If the room is shy:*
+
+| Type | Comes back |
+| --- | --- |
+| `why not just use indexeddb` | SQLite vs IndexedDB |
+| `what are those weird cross origin headers` | COOP/COEP |
+| `why is it called latent` | the name |
+| `where do we eat after the beers` | the note written **in Greek** about bougatsa |
+| `the weather in london tomorrow` | nothing, correctly |
 
 *Greek note comes back:* I asked in English, the note is Greek, they share zero words. Both land in the same space of meaning. That's an embedding. That's also the name: latent means hidden, and that hidden space is called the latent space.
 
@@ -90,7 +98,19 @@ So the screen never waits for the model. The thread that draws the page never to
 
 **Cost:** The chain on screen.
 
-*Read the chain slowly. At the third line:* SQLite is old-school. It asks for a piece of the file and waits. The browser's file API doesn't do waiting, it answers later. So SQLite hands the file work to that 21K helper and freezes until the helper drops the answer into memory they can both see. That shared memory is the SharedArrayBuffer. And that's why we need the headers.
+*Read the chain on screen, slowly:*
+
+```
+I want my notes to survive a refresh
+  └─ needs OPFS  (a private disk per website)
+       └─ SQLite's OPFS driver needs SharedArrayBuffer
+            └─ browsers only allow that on "cross-origin isolated" pages
+                 └─ needs two HTTP headers (COOP + COEP)
+                      └─ GitHub Pages can't send custom headers
+                           └─ so a service worker fakes them
+```
+
+*At the third line:* SQLite is old-school. It asks for a piece of the file and waits. The browser's file API doesn't do waiting, it answers later. So SQLite hands the file work to that 21K helper and freezes until the helper drops the answer into memory they can both see. That shared memory is the SharedArrayBuffer. And that's why we need the headers.
 
 *The fallback code:* If any link in the chain breaks, I land here and your notes live in RAM. The app now shows an amber banner when that happens. It used to say nothing.
 
@@ -111,6 +131,13 @@ Every note is a point in a 768-dimensional space. A question is a point too. Sea
 *Lines 509-511:* And from there it's plain SQL: join my normal notes table, skip the trash, closest first.
 
 *Line 522:* This is the London answer from earlier. Anything farther than 1.0 gets dropped. I picked 1.0 myself.
+
+| Distance | Means |
+| --- | --- |
+| 0 | same meaning (same direction) |
+| 1.0 | the cutoff: cosine similarity 0.5, an angle of 60° |
+| ~1.41 | unrelated (90°) |
+| 2 | opposite |
 
 *Optional, 15 seconds:* Until this week, my query computed the distance to every row by hand. This is sqlite-vec's own nearest-neighbour search. Same results, 26 times faster at 50,000 notes.
 
@@ -134,15 +161,16 @@ Every note is a point in a 768-dimensional space. A question is a point too. Sea
 
 Now break it. Make my search look stupid. Winner is whoever gets the dumbest correct-looking answer.
 
-*Depending on what they try:*
-
-- Greek → same space for every language.
-- Greeklish (pou tha fame…) → the model never saw much Greeklish, and it still limps home.
-- Typos → no spellchecker, tokens are forgiving.
-- 🍺🍽️ → beer + plate = food after beer. I did not program that.
-- `anything except sqlite` → the classic failure. Embeddings hear the topic, not the "not". If you need "not", you need filters or an LLM on top.
-- Nonsense → my cutoff of 1.0 is as made up as my percentage.
-- `I want my data in the cloud` → it finds the nearest thing, it doesn't know it disagrees with you.
+| Type | Comes back | Say |
+| --- | --- | --- |
+| `πού θα φάμε μετά` | bougatsa, strong hit | same space for every language |
+| `pou tha fame meta tis mpires` | bougatsa, **barely** (0.97, cutoff is 1.0) | the model never saw much Greeklish, and it still limps home |
+| `ti einai to embedding` | the embedding note, strong | |
+| `why nt indexdb` | IndexedDB note | no spellchecker, tokens are forgiving |
+| `🍺🍽️` | bougatsa | beer + plate = food after beer. I did not program that |
+| `anything except sqlite` | **SQLite notes** | the classic failure. Embeddings hear the topic, not the "not". If you need "not", you need filters or an LLM on top |
+| `asdfghjkl` | probably one random note right at the cutoff | my cutoff of 1.0 is as made up as my percentage |
+| `I want my data in the cloud` | the storage notes | it finds the nearest thing, it doesn't know it disagrees with you |
 
 That's the real picture of semantic search. Great at paraphrase and language, deaf to negation, and it never says "I don't know" unless you draw a line for it.
 
@@ -170,7 +198,13 @@ Warm tab, surviving a restart, cold launch. I had the first, mostly the second (
 
 ## 6 · Wrap-up (1 min)
 
-*Read the three lines on screen.*
+*Read the three lines on screen:*
+
+1. The browser is a serious runtime. Database, GPU, file system, model runner. One URL.
+2. Local AI moves the cost. I pay zero per token. Users pay in megabytes and battery.
+3. Calling the model is one line. Everything interesting, and every bug, was ordinary engineering around it.
+
+*Then the two "next" lines:*
 
 This is one `search_notes(query)` tool away from being an agent's private, offline memory, and that's a talk someone here could give.
 
